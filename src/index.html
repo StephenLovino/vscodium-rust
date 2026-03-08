@@ -11,9 +11,12 @@
     href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="assets/codicon/codicon.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+  <script type="module" src="main.ts"></script>
 </head>
 
 <body>
@@ -29,12 +32,17 @@
 
   <!-- Custom Title Bar -->
   <div id="title-bar" data-tauri-drag-region>
-    <div class="window-controls-left">
+    <div class="window-controls-left" style="margin-left: 10px;">
+      <i class="codicon codicon-code"
+        style="color: var(--accent-color); font-size: 16px; margin-right: 10px; margin-top: 2px;"></i>
       <div class="menu-item">File</div>
       <div class="menu-item">Edit</div>
       <div class="menu-item">Selection</div>
       <div class="menu-item">View</div>
       <div class="menu-item">Go</div>
+      <div class="menu-item">Run</div>
+      <div class="menu-item">Terminal</div>
+      <div class="menu-item">Help</div>
     </div>
     <div class="command-center" onclick="showCommandPalette()">
       <div class="command-box">
@@ -51,36 +59,43 @@
 
   <div id="workbench">
     <!-- Activity Bar -->
-    <aside class="activity-bar">
-      <div class="activity-item active" title="Explorer">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path
-            d="M19 5H5c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 12H5V7h14v10zM6 8h12v2H6V8zm0 4h12v2H6v-2z" />
-        </svg>
+    <aside class="sidebar-activity-bar activity-bar" id="activity-bar">
+      <div class="activity-bar-top">
+        <div class="activity-item active" title="Explorer" data-target="explorer-view">
+          <i class="codicon codicon-files"></i>
+        </div>
+        <div class="activity-item" title="Search" data-target="search-view">
+          <i class="codicon codicon-search"></i>
+        </div>
+        <div class="activity-item" title="Source Control" data-target="scm-view">
+          <i class="codicon codicon-source-control"></i>
+        </div>
+        <div class="activity-item" title="Run and Debug" data-target="debug-view">
+          <i class="codicon codicon-debug-alt"></i>
+        </div>
+        <div class="activity-item" title="Extensions" data-target="extensions-view">
+          <i class="codicon codicon-extensions"></i>
+        </div>
+        <div class="activity-item" title="Specs" data-target="specs-view">
+          <i class="codicon codicon-book"></i>
+        </div>
+        <div class="activity-item" title="Agent" data-target="agent-view">
+          <i class="codicon codicon-sparkle"></i>
+        </div>
+        <div class="activity-item" title="Workflow & Planning" data-target="planning-view">
+          <i class="codicon codicon-checklist"></i>
+        </div>
+        <div class="activity-item" title="Mobile" data-target="mobile-view">
+          <i class="codicon codicon-device-mobile"></i>
+        </div>
       </div>
-      <div class="activity-item" title="Search">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path
-            d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
-        </svg>
-      </div>
-      <div class="activity-item" title="Run and Debug">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path
-            d="M19 7h-1.42l-1.6-1.6L17.58 4 16.17 2.59 13.59 5.17l-1.42-1.42L9.58 6.33 11 7.75l-1.42 1.42L8.17 7.75 6.75 9.17l2.58 2.58-1.42 1.42L5.33 10.59 4 12.01l2.59 2.59-1.6 1.6H3.57l-1.41 1.41 2.82 2.82 1.41-1.41V17.58l1.6-1.6 2.59 2.59 1.41-1.41-2.58-2.58 1.41-1.41 2.58 2.58 1.42-1.42-2.59-2.59 1.42-1.42 2.58 2.58 1.42-1.42-2.58-2.58 1.41-1.41 2.59 2.59 1.41-1.41-2.82-2.82zM12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6z" />
-        </svg>
-      </div>
-      <div class="activity-item" title="Source Control">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path
-            d="M12 2C6.48 2 2 6.48 2 12c0 4.42 3.58 8 8 8s8-3.58 8-8c0-5.52-4.48-10-10-10zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-4.5-9L11 14.5l6-6-1.41-1.41L11 11.67l-2.09-2.09L7.5 11z" />
-        </svg>
-      </div>
-      <div class="activity-item" title="Extensions" id="activity-extensions">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-          <path
-            d="M20.5 11H19V7c0-1.1-.9-2-2-2h-4V3.5c0-1.38-1.12-2.5-2.5-2.5S8 2.12 8 3.5V5H4c-1.1 0-1.99.9-1.99 2v3.8H3.5c1.49 0 2.7 1.21 2.7 2.7s-1.21 2.7-2.7 2.7H2V20c0 1.1.9 2 2 2h3.8v-1.5c0-1.49 1.21-2.7 2.7-2.7s2.7 1.21 2.7 2.7V22H17c1.1 0 2-.9 2-2v-4h1.5c1.38 0 2.5-1.12 2.5-2.5S21.88 11 20.5 11z" />
-        </svg>
+      <div class="activity-bar-bottom">
+        <div class="activity-item" title="Accounts">
+          <i class="codicon codicon-account"></i>
+        </div>
+        <div class="activity-item" title="Manage" id="activity-settings">
+          <i class="codicon codicon-settings-gear"></i>
+        </div>
       </div>
     </aside>
 
@@ -88,8 +103,21 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-title" id="sidebar-title">Explorer</div>
       <div id="explorer-view" class="sidebar-section">
-        <div class="sidebar-section-header">⌄ VSCODE-RUST</div>
-        <div id="explorer-content" class="sidebar-content"></div>
+        <div class="sidebar-section-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div id="explorer-header-text"><i class="codicon codicon-chevron-down" style="margin-right: 4px;"></i>
+            EXPLORER</div>
+          <div class="explorer-actions" style="display: flex; gap: 8px; margin-right: 10px;">
+            <i class="codicon codicon-new-file" id="explorer-new-file" title="New File"
+              style="cursor: pointer; font-size: 14px;"></i>
+            <i class="codicon codicon-new-folder" id="explorer-new-folder" title="New Folder"
+              style="cursor: pointer; font-size: 14px;"></i>
+            <i class="codicon codicon-refresh" id="explorer-refresh" title="Refresh"
+              style="cursor: pointer; font-size: 14px;"></i>
+          </div>
+        </div>
+        <div id="explorer-content" class="sidebar-content" style="padding: 15px; text-align: center;">
+          <button class="debug-btn primary" onclick="openFolder()">Open Folder</button>
+        </div>
       </div>
       <div id="search-view" class="sidebar-section hidden">
         <div class="sidebar-section-header">SEARCH</div>
@@ -110,6 +138,30 @@
           <div id="marketplace-extensions-list"></div>
         </div>
       </div>
+      <div id="specs-view" class="sidebar-section hidden">
+        <div class="sidebar-section-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div><i class="codicon codicon-chevron-down" style="margin-right: 4px;"></i> SPECS</div>
+          <div class="specs-actions" style="margin-right: 10px;">
+            <i class="codicon codicon-add" id="new-spec" title="New Spec" style="cursor: pointer;"></i>
+          </div>
+        </div>
+        <div id="specs-content" class="sidebar-content" style="padding: 10px;">
+          <div class="specs-empty" id="specs-empty">No active specs. Create one to start a structured workflow.</div>
+          <div id="specs-list" class="specs-list"></div>
+        </div>
+      </div>
+      <div id="mobile-view" class="sidebar-section hidden">
+        <div class="sidebar-section-header" style="display: flex; justify-content: space-between; align-items: center;">
+          <div><i class="codicon codicon-chevron-down" style="margin-right: 4px;"></i> MOBILE (ADB)</div>
+          <div class="mobile-actions" style="margin-right: 10px;">
+            <i class="codicon codicon-refresh" id="refresh-adb" title="Refresh ADB" style="cursor: pointer;"></i>
+          </div>
+        </div>
+        <div id="mobile-content" class="sidebar-content" style="padding: 10px;">
+          <div class="specs-empty" id="no-devices-msg">No Android devices connected.</div>
+          <div id="device-list" class="device-list"></div>
+        </div>
+      </div>
       <div id="source-control-view" class="sidebar-section hidden">
         <div class="sidebar-section-header">SOURCE CONTROL</div>
         <div class="sidebar-search-container">
@@ -124,20 +176,55 @@
         </div>
         <div id="debug-content" class="sidebar-content">
           <div class="debug-section">
-            <div class="debug-section-header">⌄ VARIABLES</div>
+            <div class="debug-section-header"><i class="codicon codicon-chevron-right" style="margin-right: 4px;"></i>
+              VARIABLES</div>
             <div id="debug-variables" class="debug-section-content"></div>
           </div>
           <div class="debug-section">
-            <div class="debug-section-header">⌄ WATCH</div>
+            <div class="debug-section-header"><i class="codicon codicon-chevron-right" style="margin-right: 4px;"></i>
+              WATCH</div>
             <div id="debug-watch" class="debug-section-content"></div>
           </div>
           <div class="debug-section">
-            <div class="debug-section-header">⌄ CALL STACK</div>
+            <div class="debug-section-header"><i class="codicon codicon-chevron-down" style="margin-right: 4px;"></i>
+              CALL STACK</div>
             <div id="debug-callstack" class="debug-section-content"></div>
           </div>
           <div class="debug-section">
-            <div class="debug-section-header">⌄ BREAKPOINTS</div>
+            <div class="debug-section-header"><i class="codicon codicon-chevron-down" style="margin-right: 4px;"></i>
+              BREAKPOINTS</div>
             <div id="debug-breakpoints" class="debug-section-content"></div>
+          </div>
+        </div>
+      </div>
+      <div id="agent-view" class="sidebar-section hidden" style="display: flex; flex-direction: column; height: 100%;">
+        <div class="sidebar-section-header">ANTIGRAVITY AGENT</div>
+        <div class="agent-chat-container" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+          <div id="agent-messages" style="flex: 1; overflow-y: auto; padding: 10px; font-size: 12px;"></div>
+          <div class="agent-input-container" style="padding: 10px; border-top: 1px solid var(--border-color);">
+            <textarea id="agent-input" placeholder="Ask anything..."
+              style="width: 100%; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; padding: 5px; resize: none; height: 60px;"></textarea>
+            <div style="display: flex; justify-content: flex-end; margin-top: 5px;">
+              <button id="agent-send"
+                style="background: var(--button-bg); color: var(--button-text); border: none; padding: 4px 10px; border-radius: 2px; cursor: pointer; font-size: 11px;">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Planning View -->
+      <div id="planning-view" class="sidebar-section hidden"
+        style="display: flex; flex-direction: column; height: 100%;">
+        <div class="sidebar-section-header">WORKFLOW & PLANNING</div>
+        <div id="planning-content" class="sidebar-content" style="padding: 10px;">
+          <div style="color: var(--text-secondary); font-size: 11px; margin-bottom: 10px;">ACTIVE TASK BOUNDARY</div>
+          <div
+            style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: 4px; padding: 10px;">
+            <h4 style="color: #fff; font-size: 13px; margin-bottom: 5px;">Implementation Plan</h4>
+            <p style="color: var(--text-secondary); font-size: 12px;">Draft architectures and step-by-step checklists
+              here.</p>
+            <button id="plan-generate"
+              style="margin-top: 10px; background: #333; color: #ccc; border: 1px solid #444; padding: 4px 8px; border-radius: 2px; cursor: pointer; font-size: 11px;">Generate
+              Plan</button>
           </div>
         </div>
       </div>
@@ -146,54 +233,91 @@
     <!-- Sidebar Resizer -->
     <div class="resizer-v" id="sidebar-resizer"></div>
 
-    <main class="editors-layout" id="editors-layout"
-      style="display: flex; flex: 1; overflow: hidden; background: var(--bg-secondary);">
-      <!-- Primary Editor Group -->
-      <div class="editor-group active" id="group-1"
-        style="display: flex; flex: 1; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border-color);">
-        <div class="editor-main">
-          <div class="tabs-row"></div>
-          <div class="breadcrumbs" id="breadcrumbs">vscode-rust > src > main.rs</div>
-          <div class="editor-wrapper">
-            <div class="line-numbers" id="line-numbers"></div>
-            <div id="editor" class="editor-surface" contenteditable="true" spellcheck="false"></div>
-            <div id="notebook-view" class="notebook-view hidden"></div>
-            <canvas id="minimap"></canvas>
+    <div class="main-content" style="display: flex; flex-direction: column; flex: 1; overflow: hidden; min-width: 0;">
+      <main class="editors-layout" id="editors-layout"
+        style="display: flex; flex: 1; overflow: hidden; background: var(--bg-secondary);">
+        <!-- Primary Editor Group -->
+        <div class="editor-group active" id="group-1"
+          style="display: flex; flex: 1; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border-color);">
+          <div class="editor-main">
+            <div class="tabs-row"></div>
+            <div class="breadcrumbs" id="breadcrumbs">vscode-rust > src > main.rs</div>
+            <div class="editor-wrapper" style="position: relative; width: 100%; height: 100%; flex: 1;">
+              <div id="welcome-view" class="welcome-view"
+                style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%;">
+                <div class="welcome-logo">
+                  <i class="codicon codicon-rocket" style="font-size:80px; color:#cccccc;"></i>
+                </div>
+                <h1 class="welcome-title" style="font-size:24px; font-weight:300; margin-bottom:30px; margin-top:10px;">
+                  Vscodium-RUST</h1>
+                <div class="welcome-actions" style="display:flex; gap:10px;">
+                  <button class="welcome-btn primary" onclick="openFolder()"
+                    style="background:#007acc; border:none; border-radius:4px; padding:8px 16px; color:white; cursor:pointer;"><i
+                      class="codicon codicon-folder" style="vertical-align:middle; margin-right:6px;"></i>Open
+                    Folder</button>
+                  <button class="welcome-btn" onclick="switchSidebarView('agent')"
+                    style="background:#333; border:1px solid #444; border-radius:4px; padding:8px 16px; color:#ccc; cursor:pointer;">Open
+                    Agent Manager</button>
+                  <button class="welcome-btn"
+                    style="background:#333; border:1px solid #444; border-radius:4px; padding:8px 16px; color:#ccc; cursor:pointer;"><i
+                      class="codicon codicon-repo-clone" style="vertical-align:middle; margin-right:6px;"></i>Clone
+                    Repository</button>
+                </div>
+              </div>
+              <div id="editor" class="editor-surface hidden" style="width: 100%; height: 100%;"></div>
+              <div id="notebook-view" class="notebook-view hidden"></div>
+            </div>
           </div>
         </div>
-      </div>
-    </main>
+      </main>
 
-    <!-- Panel Resizer -->
-    <div class="resizer-h" id="panel-resizer"></div>
+      <!-- Panel Resizer -->
+      <div class="resizer-h" id="panel-resizer"></div>
 
-    <!-- Bottom Panel -->
-    <footer class="bottom-panel" id="bottom-panel">
-      <div class="panel-header" style="display: flex; background: var(--bg-primary);">
-        <div class="panel-tabs">
-          <div class="panel-tab active">Terminal</div>
-          <div class="panel-tab">Output</div>
-          <div class="panel-tab">Problems</div>
-          <div class="panel-tab">Debug Console</div>
+      <!-- Bottom Panel -->
+      <footer class="bottom-panel" id="bottom-panel"
+        style="height: 250px; display: flex; flex-direction: column; background: var(--bg-primary); border-top: 1px solid var(--border-color);">
+        <div class="panel-header"
+          style="display: flex; background: var(--bg-primary); border-bottom: 1px solid var(--border-color);">
+          <div class="panel-tabs">
+            <div class="panel-tab active" style="text-transform: uppercase; font-size: 11px;">Terminal</div>
+            <div class="panel-tab" style="text-transform: uppercase; font-size: 11px;">Output</div>
+            <div class="panel-tab" style="text-transform: uppercase; font-size: 11px;">Problems</div>
+            <div class="panel-tab" style="text-transform: uppercase; font-size: 11px;">Debug Console</div>
+          </div>
+          <div id="terminal-tabs"
+            style="display: flex; gap: 4px; margin-left: auto; padding: 0 10px; align-items: center;">
+            <button id="new-terminal" class="icon-btn" title="New Terminal"
+              style="background:none; border:none; color:var(--text-secondary); cursor:pointer;">
+              <i class="codicon codicon-add"></i>
+            </button>
+          </div>
         </div>
-        <div id="terminal-tabs"
-          style="display: flex; gap: 4px; margin-left: auto; padding: 0 10px; align-items: center;">
-          <button id="new-terminal" class="icon-btn" title="New Terminal"
-            style="background:none; border:none; color:var(--text-secondary); cursor:pointer;">+</button>
+        <div class="panel-content" id="panel-content"
+          style="flex: 1; position: relative; overflow: hidden; background: #1e1e1e; padding: 0;">
+          <div id="terminal-container" style="width: 100%; height: 100%;"></div>
         </div>
-      </div>
-      <div class="panel-content" id="panel-content">
-        Welcome to the native Rust terminal...
-      </div>
-    </footer>
+      </footer>
+    </div>
   </div>
   </div>
 
   <!-- Status Bar -->
   <footer class="status-bar">
     <div class="status-left">
-      <div class="status-item" id="git-indicator">🌿 main</div>
-      <div class="status-item">⟳</div>
+      <div class="status-item" id="git-indicator"><i class="codicon codicon-source-control"
+          style="font-size: 14px; margin-right: 4px;"></i>main*</div>
+      <div class="status-item" id="model-selector" title="Switch AI Model">
+        <i class="codicon codicon-sparkle" style="font-size: 14px; margin-right: 4px;"></i>
+        <span id="current-model">GPT-4o</span>
+      </div>
+      <div class="status-item" id="device-selector" title="Mobile Devices">
+        <i class="codicon codicon-device-mobile" style="font-size: 14px; margin-right: 4px;"></i>
+        <span id="current-device">No Device</span>
+      </div>
+      <div class="status-item"><i class="codicon codicon-sync" style="font-size: 14px;"></i></div>
+      <div class="status-item"><i class="codicon codicon-error" style="font-size: 14px; margin-right: 4px;"></i>0 <i
+          class="codicon codicon-warning" style="font-size: 14px; margin-left: 4px; margin-right: 4px;"></i>0</div>
       <div class="status-item" id="perf-stats">RAM: -- | CPU: --</div>
     </div>
     <div class="status-right">
@@ -201,6 +325,8 @@
       <div class="status-item">Spaces: 4</div>
       <div class="status-item">UTF-8</div>
       <div class="status-item">Rust</div>
+      <div class="status-item"><i class="codicon codicon-feedback" style="font-size: 14px;"></i></div>
+      <div class="status-item"><i class="codicon codicon-bell" style="font-size: 14px;"></i></div>
     </div>
   </footer>
 
@@ -223,7 +349,6 @@
     <div class="menu-item" id="cm-palette">Command Palette...</div>
   </div>
 
-  <script type="module" src="/main.js"></script>
 </body>
 
 </html>

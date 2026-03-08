@@ -13,8 +13,28 @@ const rl = readline.createInterface({
     terminal: false
 });
 
+// Deep Proxy to prevent crashes on unimplemented vscode APIs
+function createStubProxy(target, path = 'vscode') {
+    return new Proxy(target, {
+        get(obj, prop) {
+            if (prop in obj) {
+                return obj[prop];
+            }
+            if (typeof prop === 'string' && prop !== 'then') {
+                // Return a callable object that also acts as a proxy
+                const stub = function () {
+                    // console.warn(`[Stub Callback] ${path}.${prop}() was called with`, arguments);
+                    return createStubProxy({}, `${path}.${prop}()`);
+                };
+                return createStubProxy(stub, `${path}.${prop}`);
+            }
+            return undefined;
+        }
+    });
+}
+
 // The global vscode API available to extensions
-const vscode = {
+const vscodeImpl = {
     window: {
         showInformationMessage: (msg) => {
             sendResponse({ type: 'notification', level: 'info', message: msg });
@@ -23,8 +43,8 @@ const vscode = {
             sendResponse({ type: 'notification', level: 'error', message: msg });
         },
         get activeTextEditor() {
-            if (vscode.workspace.textDocuments.length > 0) {
-                return { document: vscode.workspace.textDocuments[0] };
+            if (vscodeImpl.workspace.textDocuments.length > 0) {
+                return { document: vscodeImpl.workspace.textDocuments[0] };
             }
             return undefined;
         }
@@ -33,38 +53,38 @@ const vscode = {
         registerCommand: (id, callback) => {
             commands.set(id, callback);
             sendResponse({ type: 'commandRegistered', id });
+            return { dispose: () => commands.delete(id) };
         }
     },
     workspace: {
         textDocuments: [],
         fs: {
             readFile: async (uri) => {
-                // Bridge to Rust
                 return await sendRequest({ type: 'workspace.readFile', uri });
             }
         },
         onDidChangeTextDocument: (callback) => {
             eventHandlers.on('onDidChangeTextDocument', callback);
+            return { dispose: () => { } };
         },
         onDidOpenTextDocument: (callback) => {
             eventHandlers.on('onDidOpenTextDocument', callback);
+            return { dispose: () => { } };
         }
     },
     debug: {
         activeDebugSession: undefined,
         startDebugging: async (folder, nameOrConfiguration) => {
-            // Bridge to Rust debug_start
             let adapter = "lldb-vscode";
             if (typeof nameOrConfiguration === 'object' && nameOrConfiguration.type) {
                 adapter = nameOrConfiguration.type;
             }
-
-            // We need a new RPC message type for this
             await sendRequest({ type: 'debug.start', adapter });
             return true;
         },
         onDidStartDebugSession: (callback) => {
             eventHandlers.on('onDidStartDebugSession', callback);
+            return { dispose: () => { } };
         }
     },
     version: '1.85.0'
@@ -81,6 +101,8 @@ const eventHandlers = {
         (this.handlers.get(event) || []).forEach(cb => cb(...args));
     }
 };
+
+const vscode = createStubProxy(vscodeImpl);
 
 // Global for extensions to access
 global.vscode = vscode;

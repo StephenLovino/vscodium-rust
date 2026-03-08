@@ -48,11 +48,15 @@ impl ExtensionHostManager {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
-                let package_json_path = path.join("package.json");
+                let mut package_json_path = path.join("package.json");
+                if !package_json_path.exists() {
+                    package_json_path = path.join("extension").join("package.json");
+                }
+                
                 if package_json_path.exists() {
                     let content = std::fs::read_to_string(&package_json_path)?;
                     if let Ok(mut meta) = serde_json::from_str::<ExtensionMetadata>(&content) {
-                        meta.path = path.clone();
+                        meta.path = package_json_path.parent().unwrap().to_path_buf();
                         // Construct ID if not present
                         if meta.id.is_empty() {
                             let publisher = meta.publisher.clone().unwrap_or_else(|| "undefined".to_string());

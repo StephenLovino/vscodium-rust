@@ -1,9 +1,9 @@
 use std::process::{Child, Command, Stdio};
-use std::io::{Write, BufRead, BufReader};
+use std::io::{Write, BufRead, BufReader, Read};
 use serde_json::{Value, json};
 use std::thread;
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Manager, Emitter};
 
 pub struct LspClient {
     child: Option<Child>,
@@ -52,7 +52,7 @@ impl LspClient {
                     if reader.read_exact(&mut buffer).is_ok() {
                         if let Ok(msg) = serde_json::from_slice::<Value>(&buffer) {
                              // Emit to frontend or handle internal state
-                             app_handle.emit_all("lsp-msg", msg).unwrap();
+                             app_handle.emit("lsp-msg", msg).unwrap();
                         }
                     }
                 }
