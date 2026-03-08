@@ -30,7 +30,6 @@ This is not just a clone; it is a proof of concept that the future of desktop ap
 Unlike traditional editors that treat AI as a bolt-on sidebar plugin, VSCodium-Rust integrates the **Premium Antigravity Agent** natively into the IDE's core.
 - **Secondary Right Sidebar**: Docks a dedicated chat pane independent of the left Explorer workspace.
 - **Advanced Autonomous Capabilities**: The Agent dynamically selects modes (`Planning`, `Fast`), loads external context (`Add Context` popup), and executes direct filesystem or terminal interactions using local tools.
-- **ApiRadar Integration**: Auto-scavenges and hot-swaps active LLM keys (OpenAI, Anthropic, Gemini, Groq, Cerebras) mapped directly to Custom Dropdown popup pickers using zero-latency absolute positioning.
 
 ### 3. Safety & Stability (Safe IPC)
 - Uses `tauri_bridge.ts` to guarantee 100% crash-free initialization logic by abstracting Tauri's invoke system. Supported by a strictly 0-warning Rust backend.
