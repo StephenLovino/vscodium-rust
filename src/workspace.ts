@@ -5,6 +5,11 @@ export interface Tab {
 }
 
 let openTabs: Tab[] = [];
+let onTabSwitch: (path: string) => void = () => { };
+
+export function setOnTabSwitch(cb: (path: string) => void) {
+    onTabSwitch = cb;
+}
 
 export function addTab(path: string, name: string) {
     openTabs.forEach(t => t.active = false);
@@ -44,8 +49,7 @@ export function renderTabs() {
 export function switchTab(path: string) {
     openTabs.forEach(t => t.active = (t.path === path));
     renderTabs();
-    // In a real implementation, this would also trigger buffer switching in Monaco
-    // which we will handle in workspace_manager.ts later.
+    if (onTabSwitch) onTabSwitch(path);
 }
 
 export function closeTab(path: string) {

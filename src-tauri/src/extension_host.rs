@@ -1,7 +1,7 @@
 use std::process::{Child, Command, Stdio};
 use std::io::{Write, BufReader, BufRead};
 use std::thread;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use serde::{Serialize, Deserialize};
 use tauri::Emitter;
 

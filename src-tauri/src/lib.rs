@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tauri_plugin_dialog;
+use tauri_plugin_opener;
 use portable_pty::{native_pty_system, CommandBuilder, PtySize, MasterPty};
 use std::io::{Read, Write};
 use tauri::{Emitter, State, Manager};
@@ -68,6 +70,7 @@ struct EditorState {
     activation_manager: Arc<Mutex<ActivationManager>>,
     perf_monitor: Arc<PerformanceMonitor>,
     ai_engine: Arc<tokio::sync::Mutex<AiEngine>>,
+    #[allow(dead_code)]
     browser_state: Arc<BrowserState>,
     config_dir: PathBuf,
     active_root: Mutex<Option<PathBuf>>,
@@ -146,10 +149,24 @@ fn open_file(state: tauri::State<'_, EditorState>, path: String) -> Result<Strin
 }
 
 #[tauri::command]
-fn open_folder_dialog() -> Option<String> {
-    // In Tauri v2 we use the tauri-plugin-dialog API.
-    // For now we'll return None because the frontend calls `window.__TAURI__.dialog.open` directly.
-    None
+async fn open_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    println!("DEBUG: open_folder command invoked");
+    
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_folder(move |folder| {
+        let _ = tx.send(folder);
+    });
+    
+    let folder = rx.await.map_err(|e| e.to_string())?;
+    println!("DEBUG: folder selected: {:?}", folder);
+    
+    Ok(folder.map(|f| {
+        match f {
+            tauri_plugin_dialog::FilePath::Path(p) => p.to_string_lossy().to_string(),
+            tauri_plugin_dialog::FilePath::Url(u) => u.path().to_string(),
+        }
+    }))
 }
 
 #[tauri::command]
@@ -182,6 +199,27 @@ fn save_file(state: tauri::State<'_, EditorState>, content: String) -> Result<()
 #[tauri::command]
 fn write_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&path, content).map_err(|e| format!("Failed to write file: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn create_file(path: String) -> Result<(), String> {
+    let p = std::path::Path::new(&path);
+    if p.exists() {
+        return Err("File already exists".to_string());
+    }
+    if let Some(parent) = p.parent() {
+        if !parent.as_os_str().is_empty() && !parent.exists() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent directories: {}", e))?;
+        }
+    }
+    std::fs::File::create(path).map_err(|e| format!("Failed to create file: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn create_dir(path: String) -> Result<(), String> {
+    std::fs::create_dir_all(path).map_err(|e| format!("Failed to create directory: {}", e))?;
     Ok(())
 }
 
@@ -248,20 +286,7 @@ fn adb_install_and_run(device: String, apk_path: String, package_name: String) -
     Ok("Successfully installed and launched app".to_string())
 }
 
-#[tauri::command]
-fn create_file(path: String) -> Result<(), String> {
-    if std::path::Path::new(&path).exists() {
-        return Err("File already exists".to_string());
-    }
-    std::fs::File::create(&path).map_err(|e| format!("Failed to create file: {}", e))?;
-    Ok(())
-}
-
-#[tauri::command]
-fn create_directory(path: String) -> Result<(), String> {
-    std::fs::create_dir_all(&path).map_err(|e| format!("Failed to create directory: {}", e))?;
-    Ok(())
-}
+// Removed duplicate create_file and create_directory
 
 #[tauri::command]
 fn rename_path(old_path: String, new_path: String) -> Result<(), String> {
@@ -600,6 +625,50 @@ async fn install_extension(state: State<'_, EditorState>, download_url: String, 
 }
 
 #[tauri::command]
+async fn install_vsix(state: State<'_, EditorState>, file_path: String) -> Result<(), String> {
+    let file = fs::File::open(&file_path).map_err(|e| e.to_string())?;
+    
+    // Generate an extension folder name based on the VSIX file name
+    let path = std::path::Path::new(&file_path);
+    let name = path.file_stem().unwrap_or_default().to_string_lossy().to_string();
+    
+    let extensions_dir = state.config_dir.join("extensions");
+    if !extensions_dir.exists() {
+        fs::create_dir_all(&extensions_dir).map_err(|e| e.to_string())?;
+    }
+
+    let target_dir = extensions_dir.join(&name);
+    if target_dir.exists() {
+        fs::remove_dir_all(&target_dir).map_err(|e| e.to_string())?;
+    }
+    fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+
+    for i in 0..archive.len() {
+        let mut f = archive.by_index(i).map_err(|e| e.to_string())?;
+        let outpath = match f.enclosed_name() {
+            Some(p) => target_dir.join(p),
+            None => continue,
+        };
+
+        if (*f.name()).ends_with('/') {
+            fs::create_dir_all(&outpath).map_err(|e| e.to_string())?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    fs::create_dir_all(&p).map_err(|e| e.to_string())?;
+                }
+            }
+            let mut outfile = fs::File::create(&outpath).map_err(|e| e.to_string())?;
+            std::io::copy(&mut f, &mut outfile).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn get_running_extensions(state: State<'_, EditorState>) -> Vec<extension_host::ExtensionMetadata> {
     state.ext_host.lock().unwrap().extensions.clone()
 }
@@ -626,19 +695,19 @@ fn check_activation_event(state: State<'_, EditorState>, event: String) -> Resul
 }
 
 #[tauri::command]
-async fn ai_chat(state: State<'_, EditorState>, prompt: String, model: Option<String>) -> Result<String, String> {
+async fn ai_chat(state: State<'_, EditorState>, prompt: String, provider: Option<String>, model: Option<String>) -> Result<String, String> {
     let root_path = state.active_root.lock().unwrap().as_ref()
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|| state.config_dir.parent().unwrap().to_string_lossy().to_string());
     
     let active_path = state.active_path.lock().unwrap().clone();
     
-    let mut engine = state.ai_engine.lock().await;
+    let engine = state.ai_engine.lock().await;
     
-    // Auto-scavenge keys if needed
-    if engine.get_key().is_empty() || engine.get_key() == "default" {
-        engine.scavenge_keys();
-    }
+    // Always attempt to fetch latest keys from ApiRadar
+    let _ = engine.fetch_apiradar_keys(&root_path).await;
+
+    let selected_provider = provider.unwrap_or_else(|| "OpenAI".to_string());
 
     let selected_model = model.unwrap_or_else(|| state.current_model.lock().unwrap().clone());
     let context = engine.get_project_context(&root_path, active_path);
@@ -656,13 +725,16 @@ async fn ai_chat(state: State<'_, EditorState>, prompt: String, model: Option<St
         - `[BROWSER_CLOSE]`\n\
         - `[EXEC_COMMAND: <cmd>]`\n\
         - `[MODIFY_FILE: <path> | <target> | <replacement>]`\n\
-        - `[READ_FILE: <path>]`\n\n\
+        - `[READ_FILE: <path>]`\n\
+        - `[CREATE_FILE: <path>]`\n\
+        - `[CREATE_DIR: <path>]`\n\n\
         ### CONTEXT\n\
         {}\n", 
         context
     );
     
     let req = AiRequest {
+        provider: selected_provider,
         model: selected_model,
         messages: vec![
             ChatMessage { role: "system".to_string(), content: sys_prompt },
@@ -671,7 +743,7 @@ async fn ai_chat(state: State<'_, EditorState>, prompt: String, model: Option<St
         temperature: Some(0.7),
     };
     
-    engine.send_prompt(req).await
+    engine.send_prompt(req, &root_path).await
 }
 
 #[tauri::command]
@@ -735,6 +807,8 @@ pub fn run() {
     let initial_api_key = std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "default".to_string());
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(EditorState {
             buffers: Mutex::new(HashMap::new()),
             active_path: Mutex::new(None),
@@ -772,17 +846,27 @@ pub fn run() {
             }
 
             let mut cmd = std::process::Command::new("opencode");
-            cmd.args(&["serve", "--port", "54321"]);
+            cmd.args(&["serve", "--port", "54322"]);
             
+            // Set a default password to avoid unsecured warning if not already set
+            if std::env::var("OPENCODE_SERVER_PASSWORD").is_err() {
+                cmd.env("OPENCODE_SERVER_PASSWORD", "heretic-elite-1337");
+            }
+
             // Inject jailbroken keys for opencode
             if !leaked_key.is_empty() {
                 cmd.env("OPENAI_API_KEY", &leaked_key);
                 cmd.env("ANTHROPIC_API_KEY", &leaked_key); // If it's a proxy key
             }
 
-            let child = cmd.spawn();
-            if let Ok(c) = child {
-                app.manage(std::sync::Mutex::new(c));
+            match cmd.spawn() {
+                Ok(child) => {
+                    app.manage(std::sync::Mutex::new(child));
+                }
+                Err(e) => {
+                    eprintln!("Failed to spawn opencode: {}", e);
+                    // Don't fail setup, just continue without the server
+                }
             }
             Ok(())
         })
@@ -802,7 +886,7 @@ pub fn run() {
             get_highlights,
             sync_content,
             list_directory,
-            open_folder_dialog,
+            open_folder,
             search_project,
             switch_to_buffer,
             get_git_branch,
@@ -825,6 +909,7 @@ pub fn run() {
             resolve_keybinding,
             search_marketplace,
             install_extension,
+            install_vsix,
             get_running_extensions,
             debug_start,
             debug_send,
@@ -845,7 +930,7 @@ pub fn run() {
             browser_close,
             ai_modify_file,
             create_file,
-            create_directory,
+            create_dir,
             rename_path,
             delete_path,
         ])

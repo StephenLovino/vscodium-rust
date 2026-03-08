@@ -2,8 +2,7 @@ use std::process::{Child, Command, Stdio};
 use std::io::{Write, BufRead, BufReader, Read};
 use serde_json::{Value, json};
 use std::thread;
-use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, Emitter};
+use tauri::{AppHandle, Emitter};
 
 pub struct LspClient {
     child: Option<Child>,

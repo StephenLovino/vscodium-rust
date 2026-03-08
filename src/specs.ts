@@ -1,5 +1,5 @@
-const { invoke } = window.__TAURI__.core;
-import { openFile } from './explorer.ts';
+import { invoke } from './tauri_bridge.ts';
+import { openFile } from './editor.ts';
 
 export interface Spec {
     name: string;

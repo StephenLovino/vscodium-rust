@@ -31,10 +31,7 @@ impl ContextKeyRegistry {
         keys.insert(key, value);
     }
 
-    pub fn get(&self, key: &str) -> Option<ContextValue> {
-        let keys = self.keys.lock().unwrap();
-        keys.get(key).cloned()
-    }
+    // Removed unused get
 
     /// Evaluates a simple "when" clause.
     /// Simplified for now: only supports single keys or "!" prefix for negation.

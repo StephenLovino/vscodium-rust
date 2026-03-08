@@ -37,5 +37,6 @@ sysinfo = "0.30"
 zip = "0.6"
 headless_chrome = "1.0.12"
 base64 = "0.21"
+regex = "1.12.3"
 
 

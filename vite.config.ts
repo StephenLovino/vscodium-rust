@@ -9,6 +9,7 @@ export default defineConfig({
     server: {
         port: 5173,
         strictPort: true,
+        host: true,
     },
     // Vite settings for Tauri
     clearScreen: false,

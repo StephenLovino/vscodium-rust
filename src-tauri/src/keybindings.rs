@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+
+// Removed unused HashMap
 use serde::{Serialize, Deserialize};
 use crate::context_key::ContextKeyRegistry;
 
@@ -49,7 +50,5 @@ impl KeybindingRegistry {
         None
     }
 
-    pub fn add_binding(&mut self, binding: Keybinding) {
-        self.bindings.push(binding);
-    }
+    // Removed unused add_binding
 }

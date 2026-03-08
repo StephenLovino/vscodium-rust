@@ -1,4 +1,4 @@
-const { invoke } = window.__TAURI__.core;
+import { invoke } from './tauri_bridge.ts';
 
 export function initMobile() {
     const refreshBtn = document.getElementById("refresh-adb");
@@ -20,7 +20,7 @@ export async function refreshDevices() {
         const devices = await invoke<string[]>("adb_list_devices");
         listContainer.innerHTML = "";
 
-        if (devices.length > 0) {
+        if (devices && devices.length > 0) {
             if (noDevicesMsg) noDevicesMsg.classList.add("hidden");
             devices.forEach(deviceId => {
                 const item = document.createElement("div");

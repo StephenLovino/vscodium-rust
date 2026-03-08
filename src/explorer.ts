@@ -1,5 +1,5 @@
-const { invoke } = window.__TAURI__.core;
-import { addTab } from './workspace.ts';
+import { invoke } from './tauri_bridge.ts';
+import { openFile } from './editor.ts';
 
 export interface FileEntry {
     name: string;
@@ -81,31 +81,43 @@ function renderExplorer(entries: FileEntry[], container: HTMLElement) {
     const ul = document.createElement("ul");
     ul.className = "tree-list";
     ul.style.listStyle = "none";
-    ul.style.paddingLeft = container === sidebarContent ? "0" : "15px";
+    ul.style.paddingLeft = container === sidebarContent ? "0" : "12px";
+
+    entries.sort((a, b) => {
+        if (a.is_dir === b.is_dir) return a.name.localeCompare(b.name);
+        return a.is_dir ? -1 : 1;
+    });
 
     entries.forEach(entry => {
         const li = document.createElement("li");
-        li.className = "tree-item";
-        li.style.padding = "2px 5px";
-        li.style.cursor = "pointer";
-        li.style.display = "flex";
-        li.style.alignItems = "center";
-        li.style.gap = "6px";
+        li.className = "tree-item-container";
+        li.style.display = "block";
+
+        const rowDiv = document.createElement("div");
+        rowDiv.className = "tree-item";
+        rowDiv.style.padding = "3px 5px";
+        rowDiv.style.cursor = "pointer";
+        rowDiv.style.display = "flex";
+        rowDiv.style.alignItems = "center";
+
+        const fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'system-ui', sans-serif";
 
         if (entry.is_dir) {
-            li.innerHTML = `<i class="codicon codicon-chevron-right tree-folder-arrow" style="font-size:14px; transition: transform 0.1s;"></i> <i class="codicon codicon-folder" style="color: #dcb67a;"></i> <span style="font-size:13px">${entry.name}</span>`;
+            rowDiv.innerHTML = `<i class="codicon codicon-chevron-right tree-folder-arrow" style="font-size:14px; margin-right:2px; transition: transform 0.1s;"></i><i class="codicon codicon-folder" style="color: #dcb67a; margin-right:6px; font-size:14px;"></i><span style="font-size:13px; font-family: ${fontFamily}; letter-spacing: 0.2px;">${entry.name}</span>`;
         } else {
-            let iconColor = entry.name.endsWith('.rs') ? '#dea584' : '#519aba';
-            li.innerHTML = `<i class="codicon codicon-file" style="color: ${iconColor}; margin-left: 18px;"></i> <span style="font-size:13px">${entry.name}</span>`;
+            let iconColor = entry.name.endsWith('.rs') ? '#dea584' : (entry.name.endsWith('.ts') ? '#3178c6' : (entry.name.endsWith('.html') || entry.name.endsWith('.htm') ? '#e34c26' : (entry.name.endsWith('.css') ? '#264de4' : '#519aba')));
+            rowDiv.innerHTML = `<i class="codicon codicon-file" style="color: ${iconColor}; margin-left: 17px; margin-right: 6px; font-size:14px;"></i><span style="font-size:13px; font-family: ${fontFamily}; letter-spacing: 0.2px;">${entry.name}</span>`;
         }
+
+        li.appendChild(rowDiv);
 
         if (entry.is_dir) {
             let expanded = false;
             let childContainer: HTMLDivElement | null = null;
-            li.onclick = async (e) => {
+            rowDiv.onclick = async (e) => {
                 e.stopPropagation();
                 expanded = !expanded;
-                const arrow = li.querySelector(".tree-folder-arrow") as HTMLElement;
+                const arrow = rowDiv.querySelector(".tree-folder-arrow") as HTMLElement;
                 if (expanded) {
                     arrow.classList.remove("codicon-chevron-right");
                     arrow.classList.add("codicon-chevron-down");
@@ -124,7 +136,7 @@ function renderExplorer(entries: FileEntry[], container: HTMLElement) {
                 }
             };
         } else {
-            li.onclick = (e) => {
+            rowDiv.onclick = (e) => {
                 e.stopPropagation();
                 openFile(entry.path, entry.name);
             };
@@ -136,30 +148,4 @@ function renderExplorer(entries: FileEntry[], container: HTMLElement) {
     container.appendChild(ul);
 }
 
-export async function openFile(path: string, name: string) {
-    try {
-        const welcomeView = document.getElementById("welcome-view");
-        const editorView = document.getElementById("editor");
-        if (welcomeView) welcomeView.classList.add("hidden");
-        if (editorView) editorView.classList.remove("hidden");
-
-        const content = await invoke<string>("open_file", { path });
-        if ((window as any).monacoEditor) (window as any).monacoEditor.setValue(content);
-        addTab(path, name);
-
-        invoke("ext_host_send", {
-            msg: JSON.stringify({
-                type: "documentOpened",
-                uri: path,
-                content: content,
-                languageId: path.endsWith(".rs") ? "rust" : "plaintext"
-            })
-        });
-
-        invoke("set_context_key", { key: "activeBuffer", value: path });
-        const langId = path.endsWith(".rs") ? "rust" : "plaintext";
-        invoke("check_activation_event", { event: `onLanguage:${langId}` });
-    } catch (e) {
-        console.error("Failed to open file:", e);
-    }
-}
+// Simplified explorer.ts

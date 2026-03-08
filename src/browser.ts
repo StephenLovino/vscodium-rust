@@ -1,4 +1,4 @@
-const { invoke } = window.__TAURI__.core;
+import { invoke } from './tauri_bridge.ts';
 
 export interface BrowserActionResult {
     success: boolean;

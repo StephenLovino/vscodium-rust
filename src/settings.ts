@@ -1,4 +1,4 @@
-const { invoke } = window.__TAURI__.core;
+import { invoke } from './tauri_bridge.ts';
 import { addTab } from './workspace.ts';
 
 export async function openSettings() {

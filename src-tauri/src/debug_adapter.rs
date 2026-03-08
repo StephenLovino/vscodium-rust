@@ -1,22 +1,14 @@
 use std::process::{Command, Child, Stdio};
 use std::io::{BufReader, BufRead, Write};
 use std::thread;
-use serde::{Serialize, Deserialize};
+
+// Removed unused imports
 use tauri::AppHandle;
 use tauri::Emitter;
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Breakpoint {
-    pub id: Option<usize>,
-    pub line: usize,
-    pub path: String,
-    pub verified: bool,
-}
 
 pub struct DebugSession {
     pub child: Child,
     pub stdin: std::process::ChildStdin,
-    pub breakpoints: Vec<Breakpoint>,
 }
 
 pub struct DebugManager {
@@ -68,7 +60,6 @@ impl DebugManager {
         self.active_session = Some(DebugSession {
             child,
             stdin,
-            breakpoints: Vec::new(),
         });
 
         Ok(())

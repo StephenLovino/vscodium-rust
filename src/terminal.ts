@@ -1,3 +1,6 @@
+import { invoke, listen } from './tauri_bridge.ts';
+import { Terminal } from '@xterm/xterm';
+
 export class TerminalManager {
     terminals: Map<string, any>;
     activeId: string | null;
@@ -25,8 +28,15 @@ export class TerminalManager {
         wrapper.id = `wrapper-${id}`;
         if (this.container) this.container.appendChild(wrapper);
 
-        // Provide generic ambient fallbacks if xterm script is loaded globally
         const TerminalKlass = (window as any).Terminal;
+        const FitAddonKlass = (window as any).FitAddon ? (window as any).FitAddon.FitAddon : null;
+
+        if (!TerminalKlass) {
+            console.error("Terminal class not found. xterm.js failed to load.");
+            if (wrapper) wrapper.innerHTML = "<div style='color:red; padding:10px;'>Terminal load failed: xterm.js not found</div>";
+            return;
+        }
+
         const term = new TerminalKlass({
             theme: { background: "#1e1e1e", foreground: "#cccccc" },
             fontSize: 12,
@@ -34,24 +44,36 @@ export class TerminalManager {
             cursorBlink: true,
         });
 
-        const FitAddonKlass = (window as any).FitAddon.FitAddon;
-        const fitAddon = new FitAddonKlass();
-        term.loadAddon(fitAddon);
+        if (FitAddonKlass) {
+            const fitAddon = new FitAddonKlass();
+            term.loadAddon(fitAddon);
+            this.terminals.set(id, { term, fitAddon, wrapper });
+        } else {
+            console.warn("FitAddon not found.");
+            this.terminals.set(id, { term, fitAddon: null, wrapper });
+        }
+
         term.open(wrapper);
         term.write("> Loading terminal backend...\r\n");
 
-        setTimeout(() => {
-            fitAddon.fit();
-        }, 100);
+        if (this.terminals.get(id).fitAddon) {
+            setTimeout(() => {
+                this.terminals.get(id).fitAddon.fit();
+            }, 100);
+        }
 
-        const invoke = window.__TAURI__.core.invoke;
-        term.onData((data: string) => invoke("write_to_terminal", { term_id: id, data }));
-        term.onResize(({ cols, rows }: { cols: number, rows: number }) => invoke("resize_terminal", { term_id: id, cols, rows }));
+        // Use imported invoke
+        term.onData((data: string) => invoke("write_to_terminal", { termId: id, data }));
+        term.onResize(({ cols, rows }: { cols: number, rows: number }) => invoke("resize_terminal", { termId: id, cols, rows }));
 
-        this.terminals.set(id, { term, fitAddon, wrapper });
         this.createTab(id);
 
-        await invoke("spawn_terminal", { term_id: id });
+        try {
+            await invoke("spawn_terminal", { termId: id });
+        } catch (e) {
+            console.error("Failed to spawn terminal:", e);
+            term.write(`\r\n\x1b[31mError spawning terminal: ${e}\x1b[0m\r\n`);
+        }
         this.switchTo(id);
     }
 
@@ -67,13 +89,17 @@ export class TerminalManager {
     }
 
     switchTo(id: string): void {
+        const t = this.terminals.get(id);
+        if (!t) return;
+
         if (this.activeId) {
-            this.terminals.get(this.activeId).wrapper.classList.add("hidden");
+            const active = this.terminals.get(this.activeId);
+            if (active) active.wrapper.classList.add("hidden");
         }
         this.activeId = id;
-        this.terminals.get(id).wrapper.classList.remove("hidden");
-        this.terminals.get(id).term.focus();
-        this.terminals.get(id).fitAddon.fit();
+        t.wrapper.classList.remove("hidden");
+        t.term.focus();
+        if (t.fitAddon) t.fitAddon.fit();
 
         document.querySelectorAll(".terminal-tab-btn").forEach((btn: any) => {
             btn.classList.toggle("active", btn.innerText.includes(`(${id.split('-')[1]})` || id));
@@ -95,10 +121,24 @@ export async function initTerminal(): Promise<void> {
     }
 
     terminalManager = new TerminalManager();
-    await terminalManager.createTerminal();
 
-    window.__TAURI__.event.listen("terminal-data", (event: any) => {
+    // Do not create terminal automatically on startup
+    // await terminalManager.createTerminal();
+
+    listen("terminal-data", (event: any) => {
         const { term_id, data } = event.payload;
-        terminalManager.handleData(term_id, data);
+        if (terminalManager) {
+            terminalManager.handleData(term_id, data);
+        }
+    });
+
+    window.addEventListener("resize", () => {
+        if (terminalManager) {
+            for (const [id, t] of terminalManager.terminals.entries()) {
+                if (t.fitAddon) {
+                    try { t.fitAddon.fit(); } catch (e) { }
+                }
+            }
+        }
     });
 }
