@@ -41,7 +41,9 @@ mod ai_engine;
 use ai_engine::{AiEngine, AiRequest, ChatMessage};
 
 mod browser;
-use browser::BrowserState;
+use browser::{
+    BrowserState, browser_open, browser_navigate, browser_screenshot, browser_close
+};
 
 use std::fs;
 use std::path::PathBuf;
@@ -65,7 +67,7 @@ struct EditorState {
     debug_manager: Arc<Mutex<DebugManager>>,
     activation_manager: Arc<Mutex<ActivationManager>>,
     perf_monitor: Arc<PerformanceMonitor>,
-    ai_engine: Arc<Mutex<AiEngine>>,
+    ai_engine: Arc<tokio::sync::Mutex<AiEngine>>,
     browser_state: Arc<BrowserState>,
     config_dir: PathBuf,
     active_root: Mutex<Option<PathBuf>>,
@@ -631,7 +633,7 @@ async fn ai_chat(state: State<'_, EditorState>, prompt: String, model: Option<St
     
     let active_path = state.active_path.lock().unwrap().clone();
     
-    let mut engine = state.ai_engine.lock().unwrap();
+    let mut engine = state.ai_engine.lock().await;
     
     // Auto-scavenge keys if needed
     if engine.get_key().is_empty() || engine.get_key() == "default" {
@@ -746,7 +748,7 @@ pub fn run() {
             debug_manager: Arc::new(Mutex::new(DebugManager::new())),
             activation_manager: Arc::new(Mutex::new(ActivationManager::new())),
             perf_monitor: Arc::new(PerformanceMonitor::new()),
-            ai_engine: Arc::new(Mutex::new(AiEngine::new(initial_api_key))),
+            ai_engine: Arc::new(tokio::sync::Mutex::new(AiEngine::new(initial_api_key))),
             browser_state: Arc::new(BrowserState::new()),
             config_dir: config_dir.clone(),
             active_root: Mutex::new(None),
@@ -837,11 +839,11 @@ pub fn run() {
             write_file,
             ai_chat,
             ai_execute_command,
-            ai_modify_file,
             browser_open,
             browser_navigate,
             browser_screenshot,
             browser_close,
+            ai_modify_file,
             create_file,
             create_directory,
             rename_path,

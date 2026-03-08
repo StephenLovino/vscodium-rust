@@ -6,6 +6,14 @@ pub struct BrowserState {
     pub browser: Mutex<Option<Browser>>,
 }
 
+impl BrowserState {
+    pub fn new() -> Self {
+        Self {
+            browser: Mutex::new(None),
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn browser_open(state: tauri::State<'_, BrowserState>) -> Result<String, String> {
     let mut browser_lock = state.browser.lock().unwrap();
