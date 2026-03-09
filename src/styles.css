@@ -1,31 +1,39 @@
 :root {
-  /* Flat VSCodium Dark+ Palette */
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #252526;
-  --bg-tertiary: #333333;
-  --title-bar-bg: #323233;
-  --sidebar-bg: #252526;
-  --activity-bar-bg: #333333;
-  --status-bar-bg: #007acc;
-  --text-primary: #cccccc;
-  --text-secondary: #969696;
-  --accent-color: #007acc;
-  --accent-glow: transparent;
-  --border-color: #3c3c3c;
-  --tab-active-bg: #1e1e1e;
-  --tab-inactive-bg: #2d2d2d;
-  --selection-bg: #264f78;
+  /* Authentic VS Code Dark+ Palette */
+  --vscode-editor-background: #1e1e1e;
+  --vscode-editor-foreground: #d4d4d4;
+  --vscode-sideBar-background: #252526;
+  --vscode-sideBar-foreground: #cccccc;
+  --vscode-activityBar-background: #333333;
+  --vscode-activityBar-foreground: #d7d7d7;
+  --vscode-activityBar-inactiveForeground: rgba(215, 215, 215, 0.4);
+  --vscode-statusBar-background: #007acc;
+  --vscode-statusBar-foreground: #ffffff;
+  --vscode-titleBar-activeBackground: #3c3c3c;
+  --vscode-titleBar-activeForeground: #cccccc;
+  --vscode-editorGroupHeader-tabsBackground: #252526;
+  --vscode-tab-activeBackground: #1e1e1e;
+  --vscode-tab-inactiveBackground: #2d2d2d;
+  --vscode-tab-activeForeground: #ffffff;
+  --vscode-tab-inactiveForeground: rgba(255, 255, 255, 0.5);
+  --vscode-tab-border: #252526;
+  --vscode-list-hoverBackground: #2a2d2e;
+  --vscode-list-activeSelectionBackground: #094771;
+  --vscode-list-activeSelectionForeground: #ffffff;
+  --vscode-focusBorder: #007fd4;
+  --vscode-input-background: #3c3c3c;
+  --vscode-panel-background: #1e1e1e;
+  --vscode-panel-border: rgba(128, 128, 128, 0.35);
 
-  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-code: "SF Mono", Monaco, Menlo, Consolas, "Ubuntu Mono", "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
-
-  /* Layout Metrics */
+  /* Layout Metrics (Pixel Perfect VS Code) */
   --activity-bar-width: 48px;
   --status-bar-height: 22px;
-  --header-height: 35px;
-  --sidebar-width: 250px;
-  --panel-height: 260px;
-  --glass-blur: 0px;
+  --title-bar-height: 35px;
+  --sidebar-width: 260px;
+  --tab-height: 35px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: "JetBrains Mono", "SF Mono", Monaco, Menlo, Consolas, "Ubuntu Mono", "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
 }
 
 * {
@@ -37,8 +45,8 @@
 }
 
 body {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
   font-family: var(--font-ui);
   height: 100vh;
   width: 100vw;
@@ -86,7 +94,7 @@ input[type="text"]::placeholder {
 }
 
 input[type="text"]:focus {
-  border: 1px solid #007acc;
+  border: 1px solid var(--vscode-focusBorder);
 }
 
 /* Resizers */
@@ -100,7 +108,7 @@ input[type="text"]:focus {
 }
 
 .resizer-v:hover {
-  background-color: var(--accent-color);
+  background-color: var(--vscode-focusBorder);
 }
 
 .resizer-h {
@@ -113,18 +121,18 @@ input[type="text"]:focus {
 }
 
 .resizer-h:hover {
-  background-color: var(--accent-color);
+  background-color: var(--vscode-focusBorder);
 }
 
 /* Custom Title Bar */
 #title-bar {
-  height: var(--header-height);
-  background-color: var(--bg-tertiary);
+  height: var(--title-bar-height);
+  background-color: var(--vscode-titleBar-activeBackground);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 10px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--vscode-panel-border);
   font-size: 12px;
   -webkit-app-region: drag;
 }
@@ -211,21 +219,18 @@ input[type="text"]:focus {
 #workbench {
   display: flex;
   flex: 1;
-  height: calc(100vh - var(--header-height) - var(--status-bar-height));
+  height: calc(100vh - var(--title-bar-height) - var(--status-bar-height));
   overflow: hidden;
 }
 
 /* Activity Bar */
 .activity-bar {
   width: var(--activity-bar-width);
-  background: var(--activity-bar-bg);
-  backdrop-filter: blur(var(--glass-blur));
+  background: var(--vscode-activityBar-background);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  border-right: 1px solid var(--border-color);
   z-index: 100;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
 }
 
 .activity-bar-top {
@@ -255,11 +260,11 @@ input[type="text"]:focus {
 }
 
 .activity-item:hover {
-  color: #fff;
+  color: var(--vscode-activityBar-foreground);
 }
 
 .activity-item.active {
-  color: #fff;
+  color: var(--vscode-activityBar-foreground);
 }
 
 .activity-item.active::before {
@@ -269,7 +274,7 @@ input[type="text"]:focus {
   top: 0;
   bottom: 0;
   width: 2px;
-  background-color: var(--accent-color);
+  background-color: var(--vscode-activityBar-foreground);
 }
 
 .activity-item i.codicon {
@@ -277,12 +282,18 @@ input[type="text"]:focus {
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.activity-item:hover i.codicon {
-  transform: scale(1.1);
+
+
+.activity-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
 }
 
 .activity-item.active i.codicon {
-  color: var(--text-primary);
+  color: var(--vscode-activityBar-activeForeground);
 }
 
 @keyframes fadeIn {
@@ -328,7 +339,7 @@ input[type="text"]:focus {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--vscode-sideBar-foreground);
   flex: 1;
 }
 
@@ -367,7 +378,7 @@ input[type="text"]:focus {
   height: 38px;
   flex-shrink: 0;
   border-radius: 4px;
-  background: var(--bg-tertiary);
+  background: var(--vscode-editor-background);
 }
 
 .extension-info {
@@ -407,14 +418,15 @@ input[type="text"]:focus {
 }
 
 .sidebar-title {
-  height: 35px;
+  height: var(--title-bar-height);
   display: flex;
   align-items: center;
   padding: 0 20px;
   font-size: 11px;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--vscode-sideBar-foreground);
   font-weight: 400;
+  opacity: 0.8;
 }
 
 .sidebar-section-header {
@@ -656,23 +668,23 @@ input[type="text"]:focus {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-primary);
+  background-color: var(--vscode-editor-background);
   overflow: hidden;
 }
 
 .breadcrumbs {
   height: 25px;
-  background-color: var(--bg-primary);
+  background-color: var(--vscode-editor-background);
   display: flex;
   align-items: center;
   padding: 0 10px;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--vscode-sideBar-foreground);
 }
 
 .tabs-row {
-  height: 35px;
-  background-color: #252526;
+  height: var(--tab-height);
+  background-color: var(--vscode-editorGroupHeader-tabsBackground);
   display: flex;
   overflow-x: auto;
 }
@@ -682,17 +694,17 @@ input[type="text"]:focus {
   padding: 0 15px;
   display: flex;
   align-items: center;
-  background-color: var(--tab-inactive-bg);
-  color: var(--text-secondary);
+  background-color: var(--vscode-tab-inactiveBackground);
+  color: var(--vscode-tab-inactiveForeground);
   font-size: 13px;
-  border-right: 1px solid var(--tab-border);
+  border-right: 1px solid var(--vscode-tab-border);
   min-width: 120px;
   position: relative;
 }
 
 .tab.active {
-  background-color: var(--tab-active-bg);
-  color: #fff;
+  background-color: var(--vscode-tab-activeBackground);
+  color: var(--vscode-tab-activeForeground);
 }
 
 .tab.active::after {
@@ -701,9 +713,8 @@ input[type="text"]:focus {
   top: 0;
   left: 0;
   right: 0;
-  height: 2px;
-  background-color: var(--accent-color);
-  box-shadow: 0 0 10px var(--accent-glow);
+  height: 1px;
+  background-color: var(--vscode-focusBorder);
 }
 
 .editor-main {
@@ -722,22 +733,22 @@ input[type="text"]:focus {
 
 .line-numbers {
   width: 50px;
-  background-color: var(--bg-primary);
+  background-color: var(--vscode-editor-background);
   color: #858585;
   text-align: right;
   padding-right: 20px;
   padding-top: 10px;
-  font-family: var(--mono-family);
+  font-family: var(--font-mono);
   font-size: 14px;
 }
 
 .editor-surface {
   flex: 1;
   padding: 10px;
-  font-family: var(--mono-family);
+  font-family: var(--font-mono);
   font-size: 14px;
   line-height: 1.5;
-  color: #d4d4d4;
+  color: var(--vscode-editor-foreground);
   outline: none;
   white-space: pre;
   overflow: auto;
@@ -776,8 +787,8 @@ input[type="text"]:focus {
 }
 
 .context-menu .menu-item:hover {
-  background-color: var(--accent-color);
-  color: #fff;
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
 }
 
 .menu-separator {
@@ -790,8 +801,8 @@ input[type="text"]:focus {
 .bottom-panel {
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-primary);
-  border-top: 1px solid var(--border-color);
+  background-color: var(--vscode-panel-background);
+  border-top: 1px solid var(--vscode-panel-border);
   z-index: 10;
 }
 
@@ -825,8 +836,8 @@ input[type="text"]:focus {
 }
 
 .panel-tab.active {
-  color: #fff;
-  border-bottom: 1px solid var(--text-primary);
+  color: var(--vscode-statusBar-foreground);
+  border-bottom: 1px solid var(--vscode-statusBar-foreground);
 }
 
 .panel-content {
@@ -869,8 +880,8 @@ input[type="text"]:focus {
 /* Status Bar */
 .status-bar {
   height: var(--status-bar-height);
-  background-color: var(--status-bar-bg);
-  color: #fff;
+  background-color: var(--vscode-statusBar-background);
+  color: var(--vscode-statusBar-foreground);
   display: flex;
   align-items: center;
   justify-content: space-between;

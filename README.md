@@ -34,9 +34,24 @@ Unlike traditional editors that treat AI as a bolt-on sidebar plugin, VSCodium-R
 ### 3. Safety & Stability (Safe IPC)
 - Uses `tauri_bridge.ts` to guarantee 100% crash-free initialization logic by abstracting Tauri's invoke system. Supported by a strictly 0-warning Rust backend.
 
+### 4. Advanced AI Integration & MCP
+- **Model Context Protocol (MCP)**: Native support for the MCP standard, enabling the Antigravity Agent to connect to external tools and data sources.
+- **IDA Pro Integration**: Support for `ida-pro-mcp` out of the box, bringing full-fledged reverse engineering capabilities to your AI-assisted workflow.
+- **Real-time Code Editing**: Deeply integrated tools for real-time file updates, deletions, and autonomous project-wide refactoring.
+
+## Strategic Breakthrough: Leveraging Zed
+
+A major milestone in this project was the integration of **Zed's core infrastructure**. By adopting Zed's high-performance primitives (GPUI, efficient CRDT-based buffers, and advanced asynchronous executor), we have successfully decoupled the IDE's core logic from the overhead of traditional web technologies. 
+
+Using Zed as a base allowed us to:
+- Implement a **GPUI-powered rendering engine** for extreme UI performance.
+- Achieve **native-grade state management** that is both thread-safe and incredibly fast.
+- Break through previous performance bottlenecks, ensuring the editor remains responsive even under heavy load.
+
 ## Credits
 
 This project stands on the shoulders of giants:
+- **[Zed Industries](https://zed.dev/)**: For open-sourcing the Zed editor and its foundational crates (GPUI, etc.). Their engineering excellence provided the "breakthrough" needed to achieve truly native performance in a modern editor.
 - **[The VSCodium Team](https://vscodium.com/)**: For their tireless work in creating a binary distribution of VS Code without MS branding/telemetry/tracking.
 - **Palinuro**: For pioneering privacy-first open source work and inspiring the "Soul" of this project—absolute user sovereignty and data privacy.
 

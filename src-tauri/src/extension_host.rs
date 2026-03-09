@@ -1,8 +1,8 @@
-use std::process::{Child, Command, Stdio};
-use std::io::{Write, BufReader, BufRead};
-use std::thread;
+use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
-use serde::{Serialize, Deserialize};
+use std::process::{Child, Command, Stdio};
+use std::thread;
 use tauri::Emitter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +38,7 @@ impl ExtensionHostManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn scan_extensions(&mut self, base_dir: PathBuf) -> std::io::Result<()> {
         if !base_dir.exists() {
             std::fs::create_dir_all(&base_dir)?;
@@ -52,14 +53,17 @@ impl ExtensionHostManager {
                 if !package_json_path.exists() {
                     package_json_path = path.join("extension").join("package.json");
                 }
-                
+
                 if package_json_path.exists() {
                     let content = std::fs::read_to_string(&package_json_path)?;
                     if let Ok(mut meta) = serde_json::from_str::<ExtensionMetadata>(&content) {
                         meta.path = package_json_path.parent().unwrap().to_path_buf();
                         // Construct ID if not present
                         if meta.id.is_empty() {
-                            let publisher = meta.publisher.clone().unwrap_or_else(|| "undefined".to_string());
+                            let publisher = meta
+                                .publisher
+                                .clone()
+                                .unwrap_or_else(|| "undefined".to_string());
                             meta.id = format!("{}.{}", publisher, meta.name);
                         }
                         self.extensions.push(meta);
@@ -81,7 +85,7 @@ impl ExtensionHostManager {
         let mut stdin = child.stdin.take().expect("Failed to open stdin");
         let stdout = child.stdout.take().expect("Failed to open stdout");
         let stderr = child.stderr.take().expect("Failed to open stderr");
-        
+
         // Send initial bootstrap with extensions
         let bootstrap = serde_json::json!({
             "type": "bootstrap",

@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 apikeys.txt
+
+# Rust
+src-tauri/target/
+src-tauri/zed/

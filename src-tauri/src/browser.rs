@@ -15,6 +15,7 @@ impl BrowserState {
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn browser_open(state: tauri::State<'_, BrowserState>) -> Result<String, String> {
     let mut browser_lock = state.browser.lock().unwrap();
     if browser_lock.is_some() {
@@ -33,6 +34,7 @@ pub async fn browser_open(state: tauri::State<'_, BrowserState>) -> Result<Strin
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn browser_navigate(state: tauri::State<'_, BrowserState>, url: String) -> Result<String, String> {
     let browser_lock = state.browser.lock().unwrap();
     let browser = browser_lock.as_ref().ok_or("Browser not launched")?;
@@ -45,6 +47,7 @@ pub async fn browser_navigate(state: tauri::State<'_, BrowserState>, url: String
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn browser_screenshot(state: tauri::State<'_, BrowserState>) -> Result<String, String> {
     let browser_lock = state.browser.lock().unwrap();
     let browser = browser_lock.as_ref().ok_or("Browser not launched")?;
@@ -61,6 +64,7 @@ pub async fn browser_screenshot(state: tauri::State<'_, BrowserState>) -> Result
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 pub async fn browser_close(state: tauri::State<'_, BrowserState>) -> Result<String, String> {
     let mut browser_lock = state.browser.lock().unwrap();
     *browser_lock = None;
