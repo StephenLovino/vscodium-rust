@@ -34,7 +34,13 @@ Unlike traditional editors that treat AI as a bolt-on sidebar plugin, VSCodium-R
 ### 3. Safety & Stability (Safe IPC)
 - Uses `tauri_bridge.ts` to guarantee 100% crash-free initialization logic by abstracting Tauri's invoke system. Supported by a strictly 0-warning Rust backend.
 
-### 4. Advanced AI Integration & MCP
+### 4. Integrated Mobile Development (Android & iOS)
+VSCodium-Rust bridges the gap between IDE and mobile testing by integrating emulators directly into the workspace.
+- **Framed Emulator Experience**: Launch and control **Android Virtual Devices (AVD)** and the **Virtual iPhone Emulator 26.3.1 JB** directly within a dedicated sidebar panel.
+- **Unified Mobile Sidebar**: A consolidated view to manage all connected and virtual mobile devices without spawning external windows.
+- **Seamless App Deployment**: Build and push apps to virtual devices with one click, leveraging the local bridge for ultra-low latency interaction.
+
+### 5. Advanced AI Integration & MCP
 - **Model Context Protocol (MCP)**: Native support for the MCP standard, enabling the Antigravity Agent to connect to external tools and data sources.
 - **IDA Pro Integration**: Support for `ida-pro-mcp` out of the box, bringing full-fledged reverse engineering capabilities to your AI-assisted workflow.
 - **Real-time Code Editing**: Deeply integrated tools for real-time file updates, deletions, and autonomous project-wide refactoring.
