@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useRef } from 'react';
 import ActivityBar from './ActivityBar';
 import { invoke } from '../tauri_bridge';
 import Sidebar from './Sidebar';
@@ -12,19 +12,65 @@ const Workbench: React.FC = () => {
     const isSidebarOpen = useStore(state => state.isSidebarOpen);
     const isBottomPanelOpen = useStore(state => state.isBottomPanelOpen);
     const isRightSidebarOpen = useStore(state => state.isRightSidebarOpen);
+    const sidebarWidth = useStore(state => state.sidebarWidth);
+    const rightSidebarWidth = useStore(state => state.rightSidebarWidth);
+    const bottomPanelHeight = useStore(state => state.bottomPanelHeight);
+    
+    const setSidebarWidth = useStore(state => state.setSidebarWidth);
+    const setRightSidebarWidth = useStore(state => state.setRightSidebarWidth);
+    const setBottomPanelHeight = useStore(state => state.setBottomPanelHeight);
+
     const tabs = useStore(state => state.tabs);
     const activeTabId = useStore(state => state.activeTabId);
     const closeTab = useStore(state => state.closeTab);
     const setActiveTab = useStore(state => state.setActiveTab);
+
+    const resizingRef = useRef<'sidebar' | 'right-sidebar' | 'panel' | null>(null);
+
+    const startResizing = useCallback((type: 'sidebar' | 'right-sidebar' | 'panel') => {
+        resizingRef.current = type;
+        document.body.style.cursor = type === 'panel' ? 'row-resize' : 'col-resize';
+        document.body.classList.add('resizing');
+        
+        const onMouseMove = (e: MouseEvent) => {
+            if (resizingRef.current === 'sidebar') {
+                const newWidth = Math.max(160, Math.min(600, e.clientX - 48)); // 48 is activity bar width
+                setSidebarWidth(newWidth);
+            } else if (resizingRef.current === 'right-sidebar') {
+                const newWidth = Math.max(200, Math.min(800, window.innerWidth - e.clientX));
+                setRightSidebarWidth(newWidth);
+            } else if (resizingRef.current === 'panel') {
+                const newHeight = Math.max(100, Math.min(window.innerHeight - 100, window.innerHeight - e.clientY - 22)); // 22 is status bar height
+                setBottomPanelHeight(newHeight);
+            }
+        };
+
+        const onMouseUp = () => {
+            resizingRef.current = null;
+            document.body.style.cursor = '';
+            document.body.classList.remove('resizing');
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+    }, [setSidebarWidth, setRightSidebarWidth, setBottomPanelHeight]);
 
     const hasOpenFile = activeTabId !== null && tabs.length > 0;
 
     return (
         <div id="workbench">
             <ActivityBar />
-            <Sidebar />
+            {isSidebarOpen && <div style={{ width: sidebarWidth, flexShrink: 0, display: 'flex' }}><Sidebar /></div>}
 
-            {isSidebarOpen && <div className="resizer-v" id="sidebar-resizer" />}
+            {isSidebarOpen && (
+                <div 
+                    className="resizer-v" 
+                    id="sidebar-resizer" 
+                    onMouseDown={() => startResizing('sidebar')}
+                />
+            )}
 
             <div className="main-content" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden', minWidth: 0 }}>
                 <main className="editors-layout" id="editors-layout" style={{ display: 'flex', flex: 1, overflow: 'hidden', background: 'var(--vscode-editor-background)' }}>
@@ -129,12 +175,30 @@ const Workbench: React.FC = () => {
                     </div>
                 </main>
 
-                {isBottomPanelOpen && <div className="resizer-h" id="panel-resizer" />}
-                <BottomPanel />
+                {isBottomPanelOpen && (
+                    <div 
+                        className="resizer-h" 
+                        id="panel-resizer" 
+                        onMouseDown={() => startResizing('panel')}
+                    />
+                )}
+                <div style={{ height: isBottomPanelOpen ? bottomPanelHeight : 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <BottomPanel />
+                </div>
             </div>
 
-            {isRightSidebarOpen && <div className="resizer-v" id="right-sidebar-resizer" />}
-            <RightSidebar />
+            {isRightSidebarOpen && (
+                <div 
+                    className="resizer-v" 
+                    id="right-sidebar-resizer" 
+                    onMouseDown={() => startResizing('right-sidebar')}
+                />
+            )}
+            {isRightSidebarOpen && (
+                <div style={{ width: rightSidebarWidth, flexShrink: 0, display: 'flex' }}>
+                    <RightSidebar />
+                </div>
+            )}
         </div>
     );
 };

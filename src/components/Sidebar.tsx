@@ -332,7 +332,7 @@ const Sidebar: React.FC = () => {
     };
 
     return (
-        <aside className="sidebar" id="sidebar" style={{ background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-sideBar-foreground)', display: 'flex', flexDirection: 'column', width: 'var(--sidebar-width)', borderRight: '1px solid var(--vscode-panel-border)' }}>
+        <aside className="sidebar" id="sidebar" style={{ background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-sideBar-foreground)', display: 'flex', flexDirection: 'column', width: '100%', height: '100%', borderRight: '1px solid var(--vscode-panel-border)' }}>
             <div id="explorer-view" className={`sidebar-section ${activeView === 'explorer-view' ? '' : 'hidden'}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: '35px', minHeight: '35px', borderBottom: '1px solid var(--vscode-panel-border)', background: 'var(--vscode-sideBar-background)' }}>
                     <span style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8 }}>

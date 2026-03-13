@@ -109,12 +109,25 @@ input[type="text"]:focus {
   width: 4px;
   cursor: col-resize;
   background-color: transparent;
-  transition: background-color 0.2s;
-  z-index: 100;
+  transition: background-color 0.1s;
+  z-index: 1000;
   flex-shrink: 0;
+  position: relative;
 }
 
-.resizer-v:hover {
+.resizer-v::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background-color: var(--vscode-panel-border);
+  transform: translateX(-50%);
+}
+
+.resizer-v:hover,
+.resizer-v:active {
   background-color: var(--vscode-focusBorder);
 }
 
@@ -122,13 +135,36 @@ input[type="text"]:focus {
   height: 4px;
   cursor: row-resize;
   background-color: transparent;
-  transition: background-color 0.2s;
-  z-index: 100;
+  transition: background-color 0.1s;
+  z-index: 1000;
   flex-shrink: 0;
+  position: relative;
 }
 
-.resizer-h:hover {
+.resizer-h::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: var(--vscode-panel-border);
+  transform: translateY(-50%);
+}
+
+.resizer-h:hover,
+.resizer-h:active {
   background-color: var(--vscode-focusBorder);
+}
+
+body.resizing {
+  user-select: none !important;
+  pointer-events: auto !important;
+}
+
+body.resizing * {
+  transition: none !important;
+  cursor: inherit !important;
 }
 
 /* Custom Title Bar */
@@ -1412,4 +1448,76 @@ body {
 
 .settings-item-control input:focus {
   border-color: var(--vscode-focusBorder);
+}
+
+/* Extension Marketplace Styles */
+.extension-item {
+  border-bottom: 1px solid var(--vscode-panel-border);
+  transition: background 0.1s;
+}
+
+.extension-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.extension-item.active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+}
+
+.extension-item .extension-name {
+  color: var(--vscode-foreground);
+}
+
+.extension-item .extension-publisher {
+  opacity: 0.7;
+}
+
+.extension-item .extension-description {
+  opacity: 0.8;
+}
+
+.extension-item .extension-actions i:hover {
+  color: var(--vscode-foreground);
+  opacity: 1;
+}
+
+.extension-item .install-btn:hover {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+/* Sidebar Customizations */
+.sidebar-accordion {
+  display: flex;
+  flex-direction: column;
+}
+
+.accordion-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  background-color: var(--vscode-sideBarSectionHeader-background);
+  color: var(--vscode-sideBarSectionHeader-foreground);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.accordion-header:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.accordion-icon {
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+.accordion-content {
+  overflow: hidden;
+  transition: max-height 0.2s ease-out;
+}
+
+.accordion-content.collapsed {
+  max-height: 0 !important;
 }

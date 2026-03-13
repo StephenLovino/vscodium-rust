@@ -26,6 +26,9 @@ interface AppState {
     activePanelTab: string;
     isRightSidebarOpen: boolean;
     theme: string;
+    sidebarWidth: number;
+    rightSidebarWidth: number;
+    bottomPanelHeight: number;
 
     // Editor State
     activeTabId: string | null;
@@ -48,6 +51,9 @@ interface AppState {
     setActivePanelTab: (tab: string) => void;
     toggleRightSidebar: () => void;
     setTheme: (theme: string) => void;
+    setSidebarWidth: (width: number) => void;
+    setRightSidebarWidth: (width: number) => void;
+    setBottomPanelHeight: (height: number) => void;
     setFileTree: (tree: FileEntry[]) => void;
     setAiStatus: (status: 'alive' | 'dead') => void;
     setTokenUsage: (usage: number) => void;
@@ -90,6 +96,9 @@ export const useStore = create<AppState>((set, get) => ({
     activePanelTab: 'TERMINAL',
     isRightSidebarOpen: false,
     theme: 'vs-dark',
+    sidebarWidth: parseInt(localStorage.getItem('sidebarWidth') || '260'),
+    rightSidebarWidth: parseInt(localStorage.getItem('rightSidebarWidth') || '300'),
+    bottomPanelHeight: parseInt(localStorage.getItem('bottomPanelHeight') || '240'),
 
     // Initial Editor State
     activeTabId: null,
@@ -112,6 +121,18 @@ export const useStore = create<AppState>((set, get) => ({
     setActivePanelTab: (tab) => set(() => ({ activePanelTab: tab, isBottomPanelOpen: true })),
     toggleRightSidebar: () => set((state) => ({ isRightSidebarOpen: !state.isRightSidebarOpen })),
     setTheme: (theme) => set({ theme }),
+    setSidebarWidth: (sidebarWidth) => {
+        localStorage.setItem('sidebarWidth', sidebarWidth.toString());
+        set({ sidebarWidth });
+    },
+    setRightSidebarWidth: (rightSidebarWidth) => {
+        localStorage.setItem('rightSidebarWidth', rightSidebarWidth.toString());
+        set({ rightSidebarWidth });
+    },
+    setBottomPanelHeight: (bottomPanelHeight) => {
+        localStorage.setItem('bottomPanelHeight', bottomPanelHeight.toString());
+        set({ bottomPanelHeight });
+    },
     setFileTree: (tree) => set({ fileTree: tree }),
     setAiStatus: (aiStatus) => set({ aiStatus }),
     setTokenUsage: (tokenUsage) => set({ tokenUsage }),

@@ -46,6 +46,10 @@ const StatusBar: React.FC = () => {
                     <i className="codicon codicon-device-mobile" style={{ fontSize: '13px', marginRight: '4px' }}></i>
                     <span>No Device</span>
                 </div>
+                <div className="status-item hoverable" onClick={() => window.open('https://buymeacoffee.com/H4D3ZS', '_blank')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px', color: '#ff813f' }}>
+                    <i className="codicon codicon-heart" style={{ fontSize: '13px', marginRight: '4px' }}></i>
+                    <span>Support</span>
+                </div>
             </div>
             <div className="status-right" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
                 <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>Ln 1, Col 1</div>

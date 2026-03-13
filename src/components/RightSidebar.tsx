@@ -88,7 +88,7 @@ const RightSidebar: React.FC = () => {
     ];
 
     return (
-        <aside className="right-sidebar" id="right-sidebar" style={{ display: 'flex', width: '400px', flexDirection: 'column', background: 'var(--vscode-sideBar-background)', borderLeft: '1px solid var(--vscode-panel-border)', zIndex: 10 }}>
+        <aside className="right-sidebar" id="right-sidebar" style={{ display: 'flex', width: '100%', height: '100%', flexDirection: 'column', background: 'var(--vscode-sideBar-background)', borderLeft: '1px solid var(--vscode-panel-border)', zIndex: 10 }}>
             {/* ... rest of header ... */}
             <div className="right-sidebar-header" style={{ height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 10px', background: 'var(--vscode-editorGroupHeader-tabsBackground)', borderBottom: '1px solid var(--vscode-panel-border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

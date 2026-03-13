@@ -40,7 +40,7 @@ const BottomPanel: React.FC = () => {
     };
 
     return (
-        <footer className="bottom-panel" id="bottom-panel" style={{ height: '300px', display: 'flex', flexDirection: 'column', background: 'var(--vscode-panel-background)', borderTop: '1px solid var(--vscode-panel-border)', zIndex: 10 }}>
+        <footer className="bottom-panel" id="bottom-panel" style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column', background: 'var(--vscode-panel-background)', borderTop: '1px solid var(--vscode-panel-border)', zIndex: 10 }}>
             <div className="panel-header" style={{ display: 'flex', background: 'var(--vscode-panel-background)', borderBottom: '1px solid var(--vscode-panel-border)', alignItems: 'center', height: '35px' }}>
                 <div className="panel-tabs" style={{ display: 'flex', height: '100%' }}>
                     <div 
