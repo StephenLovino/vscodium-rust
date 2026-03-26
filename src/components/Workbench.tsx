@@ -8,6 +8,16 @@ import Editor from './Editor';
 import SettingsPage from './SettingsPage';
 import { useStore } from '../store';
 
+function detectLanguageIcon(filename: string): string {
+    const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+    const map: Record<string, string> = {
+        rs: 'rust', ts: 'typescript', tsx: 'react', js: 'javascript',
+        jsx: 'react', json: 'json', css: 'css', html: 'html',
+        md: 'markdown', toml: 'settings', yaml: 'symbol-method', yml: 'symbol-method',
+    };
+    return map[ext] ?? 'file';
+}
+
 const Workbench: React.FC = () => {
     const isSidebarOpen = useStore(state => state.isSidebarOpen);
     const isBottomPanelOpen = useStore(state => state.isBottomPanelOpen);
@@ -108,20 +118,23 @@ const Workbench: React.FC = () => {
                             </div>
 
                             {/* Breadcrumbs */}
-                            <div className="breadcrumbs" id="breadcrumbs">
+                            <div className="breadcrumbs" id="breadcrumbs" style={{ height: '22px', borderBottom: '1px solid var(--vscode-panel-border)', display: 'flex', alignItems: 'center', padding: '0 16px', fontSize: '12px', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8 }}>
                                 {hasOpenFile ? (
                                     <>
-                                        <span style={{ padding: '0 4px' }}>{tabs.find(t => t.id === activeTabId)?.path.split('/').slice(-2, -1)[0] ?? 'VSCodium Rust'}</span>
-                                        <i className="codicon codicon-chevron-right" style={{ fontSize: '12px', opacity: 0.6 }} />
-                                        <span style={{ padding: '0 4px', color: 'var(--vscode-tab-activeForeground)' }}>
+                                        <i className="codicon codicon-folder" style={{ fontSize: '14px', marginRight: '4px', opacity: 0.6 }} />
+                                        <span className="breadcrumb-item" style={{ cursor: 'pointer' }}>{(tabs.find(t => t.id === activeTabId)?.path.split('/').slice(-2, -1)[0]) ?? ((window as any).activeRootName || 'vscodium-rust')}</span>
+                                        <i className="codicon codicon-chevron-right" style={{ fontSize: '12px', margin: '0 4px', opacity: 0.4 }} />
+                                        <i className={`codicon codicon-${detectLanguageIcon(tabs.find(t => t.id === activeTabId)?.filename || '')}`} style={{ fontSize: '14px', marginRight: '4px', opacity: 0.6 }} />
+                                        <span className="breadcrumb-item active" style={{ color: 'var(--vscode-tab-activeForeground)', fontWeight: 400 }}>
                                             {tabs.find(t => t.id === activeTabId)?.filename}
                                         </span>
                                     </>
                                 ) : (
                                     <>
-                                        <span style={{ padding: '0 4px' }}>VSCodium Rust</span>
-                                        <i className="codicon codicon-chevron-right" style={{ fontSize: '12px', opacity: 0.6 }} />
-                                        <span style={{ padding: '0 4px', color: 'var(--vscode-tab-activeForeground)' }}>Welcome</span>
+                                        <i className="codicon codicon-folder" style={{ fontSize: '14px', marginRight: '4px', opacity: 0.6 }} />
+                                        <span className="breadcrumb-item">{(window as any).activeRootName || 'vscodium-rust'}</span>
+                                        <i className="codicon codicon-chevron-right" style={{ fontSize: '12px', margin: '0 4px', opacity: 0.4 }} />
+                                        <span className="breadcrumb-item active" style={{ color: 'var(--vscode-tab-activeForeground)' }}>Welcome</span>
                                     </>
                                 )}
                             </div>
@@ -129,32 +142,27 @@ const Workbench: React.FC = () => {
                             <div className="editor-wrapper" style={{ position: 'relative', width: '100%', height: '100%', flex: 1 }}>
                                 {/* Welcome screen when no file is open */}
                                 {!hasOpenFile && (
-                                    <div id="welcome-view" className="welcome-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'var(--vscode-editor-background)' }}>
-                                        <div className="welcome-logo" style={{ marginBottom: '20px', opacity: 0.7 }}>
+                                    <div id="welcome-view" className="welcome-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'var(--vscode-editor-background)', color: 'var(--vscode-sideBar-foreground)' }}>
+                                        <div className="welcome-logo" style={{ marginBottom: '24px', opacity: 0.8 }}>
                                             <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
                                                 <path d="M72.4 15.2L28.8 45.3L15.6 33.7L6.4 41.5L25.3 71.3L72.4 84.8C75.8 85.8 79.1 83.3 79.1 79.7V20.3C79.1 16.7 75.8 14.2 72.4 15.2Z" fill="#0065A9" />
                                                 <path d="M72.4 15.2L28.8 45.3L25.3 71.3L72.4 84.8C75.8 85.8 79.1 83.3 79.1 79.7V20.3C79.1 16.7 75.8 14.2 72.4 15.2Z" fill="#007ACC" />
                                                 <path d="M28.8 45.3L15.6 33.7L25.3 54.7L28.8 45.3Z" fill="#1F9CEB" />
                                             </svg>
                                         </div>
-                                        <h1 className="welcome-title" style={{ fontSize: '32px', fontWeight: 300, marginBottom: '4px', color: 'var(--vscode-sideBar-foreground)' }}>Visual Studio Code</h1>
-                                        <h2 style={{ fontSize: '18px', fontWeight: 300, color: 'var(--vscode-sideBar-foreground)', opacity: 0.6, marginBottom: '30px' }}>Editing evolved</h2>
-                                        <div className="welcome-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start' }}>
-                                            <span style={{ fontSize: '14px', color: 'var(--vscode-sideBar-foreground)', fontWeight: 400, marginBottom: '10px' }}>Start</span>
-                                            <a href="#" className="welcome-link" id="welcome-new-file" 
-                                               onClick={(e) => { e.preventDefault(); (window as any).executeCommand('explorer.newFile'); }}
-                                               style={{ color: 'var(--vscode-focusBorder)', textDecoration: 'none', fontSize: '13px', display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: '4px' }}>
-                                                <i className="codicon codicon-new-file" style={{ marginRight: '8px', fontSize: '16px' }} />New File...
+                                        <h1 className="welcome-title" style={{ fontSize: '36px', fontWeight: 200, marginBottom: '6px' }}>Visual Studio Code</h1>
+                                        <h2 style={{ fontSize: '18px', fontWeight: 200, opacity: 0.5, marginBottom: '40px' }}>Editing evolved</h2>
+                                        
+                                        <div className="welcome-actions" style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-start', minWidth: '200px' }}>
+                                            <span style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', opacity: 0.8 }}>Start</span>
+                                            <a href="#" onClick={(e) => { e.preventDefault(); (window as any).executeCommand('explorer.newFile'); }} style={{ color: 'var(--vscode-focusBorder)', textDecoration: 'none', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <i className="codicon codicon-new-file" /> New File...
                                             </a>
-                                            <a href="#" className="welcome-link" id="welcome-open-folder" 
-                                               onClick={(e) => { e.preventDefault(); invoke('open_folder'); }}
-                                               style={{ color: 'var(--vscode-focusBorder)', textDecoration: 'none', fontSize: '13px', display: 'flex', alignItems: 'center', cursor: 'pointer', marginBottom: '4px' }}>
-                                                <i className="codicon codicon-folder-opened" style={{ marginRight: '8px', fontSize: '16px' }} />Open Folder...
+                                            <a href="#" onClick={(e) => { e.preventDefault(); (window as any).executeCommand('explorer.openFolder'); }} style={{ color: 'var(--vscode-focusBorder)', textDecoration: 'none', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <i className="codicon codicon-folder-opened" /> Open Folder...
                                             </a>
-                                            <a href="#" className="welcome-link" 
-                                               onClick={(e) => { e.preventDefault(); (window as any).executeCommand('git.clone'); }}
-                                               style={{ color: 'var(--vscode-focusBorder)', textDecoration: 'none', fontSize: '13px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                                                <i className="codicon codicon-repo-clone" style={{ marginRight: '8px', fontSize: '16px' }} />Clone Git Repository...
+                                            <a href="#" onClick={(e) => { e.preventDefault(); (window as any).executeCommand('git.clone'); }} style={{ color: 'var(--vscode-focusBorder)', textDecoration: 'none', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <i className="codicon codicon-source-control" /> Clone Git Repository...
                                             </a>
                                         </div>
                                     </div>

@@ -33,6 +33,10 @@ const TitleBar: React.FC = () => {
         <div id="title-bar" data-tauri-drag-region>
             <div className="title-bar-left">
                 <div className="window-controls-spacer"></div>
+                <div className="navigation-controls" style={{ display: 'flex', gap: '4px', marginRight: '12px', opacity: 0.6 }}>
+                    <i className="codicon codicon-arrow-left hoverable" title="Go Back"></i>
+                    <i className="codicon codicon-arrow-right hoverable" title="Go Forward"></i>
+                </div>
                 <div className="menu-items-container">
                     {menus.map(menu => (
                         <div key={menu.label} className="menu-item-wrapper">
@@ -60,7 +64,17 @@ const TitleBar: React.FC = () => {
                 </div>
             </div>
 
+            <div className="command-center" onClick={() => (window as any).showCommandPalette?.()}>
+                <div className="command-box">
+                    <i className="codicon codicon-search" style={{ fontSize: '12px', marginRight: '8px', opacity: 0.6 }}></i>
+                    <div className="text" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        { (window as any).activeRootName || 'vscodium-rust' } — { (window as any).useStore?.getState().activeTabId ? ( (window as any).useStore?.getState().tabs.find((t:any) => t.id === (window as any).useStore?.getState().activeTabId)?.filename || 'Welcome' ) : 'Welcome' }
+                    </div>
+                </div>
+            </div>
+
             <div className="title-bar-right">
+                <i className="codicon codicon-layout-centered-single hoverable" title="Toggle Layout"></i>
                 <i
                     className="codicon codicon-layout-sidebar-right hoverable"
                     title="Toggle Agent (⌥⌘B)"
@@ -72,6 +86,7 @@ const TitleBar: React.FC = () => {
                 <div className="menu-overlay" onClick={() => setActiveMenu(null)}></div>
             )}
         </div>
+
     );
 };
 

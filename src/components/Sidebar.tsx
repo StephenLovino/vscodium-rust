@@ -3,11 +3,11 @@ import { useStore, type FileEntry } from '../store';
 import { invoke } from '@tauri-apps/api/core';
 import GitGraph from './GitGraph';
 import EmulatorPanel from './EmulatorPanel';
+import WorkflowPanel from './WorkflowPanel';
 
-const FileTreeItem: React.FC<{ entry: FileEntry; depth: number }> = ({ entry, depth }) => {
+const FileTreeItem: React.FC<{ entry: FileEntry; depth: number; iconThemeMapping: any }> = ({ entry, depth, iconThemeMapping }) => {
     const [isCollapsed, setIsCollapsed] = useState(true);
     const openFile = useStore(state => state.openFile);
-    const iconThemeMapping = useStore(state => state.iconThemeMapping);
 
     const getIcon = () => {
         if (entry.is_dir) {
@@ -71,34 +71,36 @@ const FileTreeItem: React.FC<{ entry: FileEntry; depth: number }> = ({ entry, de
     return (
         <div className="file-tree-item" style={{ userSelect: 'none' }}>
             <div
-                className="tree-row"
+                className={`tree-row${useStore.getState().tabs.find(t => t.id === useStore.getState().activeTabId)?.path === entry.path ? ' active' : ''}`}
                 onClick={handleToggle}
                 onContextMenu={handleContextMenu}
                 style={{
                     display: 'flex',
                     alignItems: 'center',
                     height: '22px',
-                    paddingLeft: `${depth * 12 + 12}px`,
+                    paddingLeft: `${depth * 8 + 12}px`,
                     cursor: 'pointer',
                     fontSize: '13px',
                     color: 'var(--vscode-sideBar-foreground)',
-                    whiteSpace: 'nowrap'
+                    whiteSpace: 'nowrap',
+                    position: 'relative'
                 }}
             >
+                {/* Selection indicator background would be handle by CSS */}
                 {(() => {
                     const icon = getIcon();
                     if (icon.type === 'img') {
-                        return <img src={icon.value} style={{ marginRight: '6px', width: '16px', height: '16px' }} />;
+                        return <img src={icon.value} style={{ marginRight: '6px', width: '16px', height: '16px', opacity: 0.9 }} />;
                     } else {
-                        return <i className={icon.value} style={{ marginRight: '6px', fontSize: '14px', width: '16px', textAlign: 'center' }}></i>;
+                        return <i className={icon.value} style={{ marginRight: '6px', fontSize: '14px', width: '16px', textAlign: 'center', opacity: 0.8 }}></i>;
                     }
                 })()}
-                <span>{entry.name}</span>
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.name}</span>
             </div>
             {!isCollapsed && entry.children && (
                 <div className="tree-children">
                     {entry.children.map(child => (
-                        <FileTreeItem key={child.path} entry={child} depth={depth + 1} />
+                        <FileTreeItem key={child.path} entry={child} depth={depth + 1} iconThemeMapping={iconThemeMapping} />
                     ))}
                 </div>
             )}
@@ -106,17 +108,43 @@ const FileTreeItem: React.FC<{ entry: FileEntry; depth: number }> = ({ entry, de
     );
 };
 
+const OpenEditorsItem: React.FC<{ tab: any; active: boolean; onClick: () => void; onClose: () => void }> = ({ tab, active, onClick, onClose }) => (
+    <div className={`pane-item${active ? ' active' : ''}`} onClick={onClick}>
+        <i className={`codicon codicon-${detectLanguageIcon(tab.filename)}`}></i>
+        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.filename}</span>
+        {tab.isModified && <div className="modified-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--vscode-tab-activeForeground)', marginRight: 4 }}></div>}
+        <i className="codicon codicon-close close-icon" onClick={(e) => { e.stopPropagation(); onClose(); }}></i>
+    </div>
+);
+
+function detectLanguageIcon(filename: string): string {
+    const ext = filename.split('.').pop()?.toLowerCase() ?? '';
+    const map: Record<string, string> = {
+        rs: 'rust', ts: 'typescript', tsx: 'react', js: 'javascript',
+        jsx: 'react', json: 'json', css: 'css', html: 'html',
+        md: 'markdown', toml: 'settings', yaml: 'symbol-method', yml: 'symbol-method',
+    };
+    return map[ext] ?? 'file';
+}
+
+const SidebarPane: React.FC<{ title: string; children: React.ReactNode; defaultCollapsed?: boolean; actions?: React.ReactNode }> = ({ title, children, defaultCollapsed = false, actions }) => {
+    const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+    return (
+        <div className="sidebar-pane" style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+            <div className={`pane-header${isCollapsed ? ' collapsed' : ''}`} onClick={() => setIsCollapsed(!isCollapsed)}>
+                <i className="codicon codicon-chevron-down"></i>
+                <span style={{ flex: 1 }}>{title}</span>
+                {actions && <div className="pane-actions" onClick={e => e.stopPropagation()}>{actions}</div>}
+            </div>
+            {!isCollapsed && <div className="pane-content">{children}</div>}
+        </div>
+    );
+};
+
 const Sidebar: React.FC = () => {
     const activeView = useStore(state => state.activeSidebarView);
     const isOpen = useStore(state => state.isSidebarOpen);
-    const fileTree = useStore(state => state.fileTree);
-    const refreshFileTree = useStore(state => state.refreshFileTree);
-    const setActiveRoot = useStore(state => state.setActiveRoot);
-    const closeFolder = useStore(state => state.closeFolder);
-    const activeRoot = useStore(state => state.activeRoot);
-    const activeRootName = useStore(state => state.activeRootName);
-    const activeDevice = useStore(state => state.activeDevice);
-    const setView = useStore(state => state.setActiveSidebarView);
+    const { activeRoot, activeRootName, activeDevice, fileTree, refreshFileTree, setActiveRoot, closeFolder, setActiveSidebarView, refreshAvailableModels, extensionContributions, iconThemeMapping } = useStore();
     const openFile = useStore(state => state.openFile);
 
     // API Keys state
@@ -159,6 +187,7 @@ const Sidebar: React.FC = () => {
                     alibaba: alibabaKey
                 }
             });
+            await refreshAvailableModels();
             setStatusMessage('API Keys Saved Successfully.');
             setTimeout(() => setStatusMessage(''), 3000);
         } catch (err) {
@@ -342,42 +371,58 @@ const Sidebar: React.FC = () => {
 
     return (
         <aside className="sidebar" id="sidebar" style={{ background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-sideBar-foreground)', display: 'flex', flexDirection: 'column', width: '100%', height: '100%', borderRight: '1px solid var(--vscode-panel-border)' }}>
-            <div id="explorer-view" className={`sidebar-section ${activeView === 'explorer-view' ? '' : 'hidden'}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: '35px', minHeight: '35px', borderBottom: '1px solid var(--vscode-panel-border)', background: 'var(--vscode-sideBar-background)' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8 }}>
-                        {activeRootName || 'EXPLORER'}
-                    </span>
-                    {activeRoot && (
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                            <i className="codicon codicon-new-file" onClick={handleNewFile} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="New File"></i>
-                            <i className="codicon codicon-new-folder" onClick={handleNewFolder} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="New Folder"></i>
-                            <i className="codicon codicon-refresh" onClick={handleRefresh} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Refresh Explorer"></i>
-                            <i className="codicon codicon-close-all" onClick={handleCloseFolder} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Close Folder"></i>
-                        </div>
-                    )}
-                </div>
-                <div id="explorer-content" className="sidebar-content" style={{ display: 'flex', flexDirection: 'column', padding: '0 0 10px 0', overflowY: 'auto', flex: 1 }}>
-                    {(activeRoot && fileTree.length > 0) ? (
-                        <div className="file-tree" style={{ width: '100%' }}>
-                            {fileTree.map(entry => (
-                                <FileTreeItem key={entry.path} entry={entry} depth={0} />
+            {activeView === 'explorer-view' && (
+                <div id="explorer-content" className="sidebar-content" style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1 }}>
+                    <SidebarPane title="Open Editors" defaultCollapsed={false}>
+                        <div className="open-editors-list">
+                            {useStore.getState().tabs.map(tab => (
+                                <OpenEditorsItem 
+                                    key={tab.id} 
+                                    tab={tab} 
+                                    active={useStore.getState().activeTabId === tab.id}
+                                    onClick={() => useStore.getState().setActiveTab(tab.id)}
+                                    onClose={() => useStore.getState().closeTab(tab.id)}
+                                />
                             ))}
+                            {useStore.getState().tabs.length === 0 && (
+                                <div style={{ padding: '8px 20px', fontSize: '12px', opacity: 0.5 }}>No editors open</div>
+                            )}
                         </div>
-                    ) : (
-                        <>
-                            <div style={{ padding: '20px', textAlign: 'center', opacity: 0.6, fontSize: '12px' }}>
-                                You have not yet opened a folder.
+                    </SidebarPane>
+
+                    <SidebarPane 
+                        title={activeRootName || 'No Folder Opened'} 
+                        actions={activeRoot ? (
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingRight: '8px' }}>
+                                <i className="codicon codicon-new-file" onClick={handleNewFile} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="New File"></i>
+                                <i className="codicon codicon-new-folder" onClick={handleNewFolder} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="New Folder"></i>
+                                <i className="codicon codicon-refresh" onClick={handleRefresh} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Refresh Explorer"></i>
+                                <i className="codicon codicon-close-all" onClick={handleCloseFolder} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Close Folder"></i>
                             </div>
-                            <button
-                                className="primary-button"
-                                id="explorer-open-folder"
-                                onClick={handleOpenFolder}
-                                style={{ background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)', border: 'none', padding: '6px 10px', borderRadius: '2px', cursor: 'pointer', fontSize: '13px', margin: '0 20px' }}
-                            >Open Folder</button>
-                        </>
-                    )}
+                        ) : null}
+                    >
+                        {(activeRoot && fileTree.length > 0) ? (
+                            <div className="file-tree" style={{ width: '100%' }}>
+                                {fileTree.map(entry => (
+                                    <FileTreeItem key={entry.path} entry={entry} depth={0} iconThemeMapping={iconThemeMapping} />
+                                ))}
+                            </div>
+                        ) : (
+                            <div style={{ padding: '10px 0' }}>
+                                <div style={{ padding: '10px 20px', opacity: 0.6, fontSize: '12px' }}>
+                                    You have not yet opened a folder.
+                                </div>
+                                <button
+                                    className="primary-button"
+                                    id="explorer-open-folder"
+                                    onClick={handleOpenFolder}
+                                    style={{ background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)', border: 'none', padding: '6px 10px', borderRadius: '2px', cursor: 'pointer', fontSize: '13px', margin: '0 20px', width: 'calc(100% - 40px)' }}
+                                >Open Folder</button>
+                            </div>
+                        )}
+                    </SidebarPane>
                 </div>
-            </div>
+            )}
 
             <div id="agent-view" className={`sidebar-section ${activeView === 'agent-view' ? '' : 'hidden'}`}>
                 <div className="sidebar-section-header">AGENT SETTINGS</div>
@@ -411,7 +456,7 @@ const Sidebar: React.FC = () => {
                 <div id="search-results" className="sidebar-content"></div>
             </div>
 
-            <div id="extensions-view" className={`sidebar-section ${activeView === 'extensions-view' ? '' : 'hidden'}`}>
+            <div id="extensions-view" className={`sidebar-section ${activeView === 'extensions-view' ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <div className="sidebar-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>EXTENSIONS</div>
                     <div className="extensions-actions" style={{ marginRight: '10px' }}>
@@ -419,17 +464,26 @@ const Sidebar: React.FC = () => {
                     </div>
                 </div>
                 <div className="sidebar-search-container" style={{ padding: '10px' }}>
-                    <input type="text" id="extensions-search-input" placeholder="Search Extensions in Marketplace" style={{ width: '100%', boxSizing: 'border-box', background: 'var(--vscode-input-background)', color: 'var(--vscode-sideBar-foreground)', border: '1px solid transparent', padding: '4px 6px', fontSize: '13px', outline: 'none' }} />
+                    <input type="text" id="extensions-search-input" placeholder="Search Extensions in Marketplace" style={{ width: '100%', boxSizing: 'border-box', background: 'var(--vscode-input-background)', color: 'var(--vscode-sideBar-foreground)', border: '1px solid transparent', padding: '4px 6px', fontSize: '12px', outline: 'none' }} />
                 </div>
-                <div id="extensions-content" className="sidebar-content sidebar-accordion">
-                    <div className="accordion-header" id="installed-accordion-header">
-                        <i className="codicon codicon-chevron-down accordion-icon"></i>
-                        <span className="accordion-title">Installed</span>
+                <div id="extensions-content" className="sidebar-content" style={{ flex: 1, overflowY: 'auto' }}>
+                    <div className="accordion-header" id="installed-accordion-header" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', fontSize: '11px', fontWeight: 'bold' }}>
+                        <i className="codicon codicon-chevron-down accordion-icon" style={{ marginRight: '6px' }}></i>
+                        <span className="accordion-title" style={{ flex: 1 }}>INSTALLED</span>
+                        <span className="accordion-badge" id="installed-count-badge" style={{ background: '#333', padding: '0 6px', borderRadius: '10px', fontSize: '10px' }}>0</span>
                     </div>
                     <div id="installed-extensions-list" className="accordion-content"></div>
-                    <div className="accordion-header" id="marketplace-accordion-header">
-                        <i className="codicon codicon-chevron-down accordion-icon"></i>
-                        <span className="accordion-title">Marketplace</span>
+
+                    <div className="accordion-header" id="recommended-accordion-header" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', fontSize: '11px', fontWeight: 'bold', borderTop: '1px solid var(--vscode-panel-border)' }}>
+                        <i className="codicon codicon-chevron-down accordion-icon" style={{ marginRight: '6px' }}></i>
+                        <span className="accordion-title" style={{ flex: 1 }}>RECOMMENDED</span>
+                        <span className="accordion-badge" id="recommended-count-badge" style={{ background: '#333', padding: '0 6px', borderRadius: '10px', fontSize: '10px' }}>8</span>
+                    </div>
+                    <div id="recommended-extensions-list" className="accordion-content"></div>
+
+                    <div className="accordion-header" id="marketplace-accordion-header" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', fontSize: '11px', fontWeight: 'bold', borderTop: '1px solid var(--vscode-panel-border)' }}>
+                        <i className="codicon codicon-chevron-down accordion-icon" style={{ marginRight: '6px' }}></i>
+                        <span className="accordion-title" style={{ flex: 1 }}>MARKETPLACE</span>
                     </div>
                     <div id="marketplace-extensions-list" className="accordion-content"></div>
                 </div>
@@ -505,20 +559,27 @@ const Sidebar: React.FC = () => {
                 </div>
             </div>
 
-            <div id="planning-view" className={`sidebar-section ${activeView === 'planning-view' ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div id="planning-view" className={`sidebar-section ${activeView === 'planning-view' ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
                 <div className="sidebar-section-header">GIT PLANNING & WORKFLOW</div>
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <GitGraph />
-                </div>
-                <div id="planning-content" className="sidebar-content" style={{ padding: '15px', borderTop: '1px solid var(--vscode-panel-border)' }}>
-                    <div style={{ color: 'var(--vscode-sideBar-foreground)', opacity: 0.6, fontSize: '11px', marginBottom: '10px' }}>ACTIVE TASK BOUNDARY</div>
-                    <div style={{ background: 'var(--vscode-editor-background)', border: '1px solid var(--vscode-panel-border)', borderRadius: '4px', padding: '10px' }}>
-                        <h4 style={{ color: '#fff', fontSize: '13px', marginBottom: '5px' }}>Workflow Strategy</h4>
-                        <p style={{ color: 'var(--vscode-sideBar-foreground)', opacity: 0.8, fontSize: '12px' }}>Review git history to plan your next architectural move.</p>
-                        <button id="plan-generate" style={{ width: '100%', marginTop: '10px', background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)', border: 'none', padding: '6px 10px', borderRadius: '2px', cursor: 'pointer', fontSize: '12px' }}>Generate Implementation Plan</button>
-                    </div>
+                <div style={{ flex: 1, overflowY: 'auto' }}>
+                    <WorkflowPanel />
                 </div>
             </div>
+
+            {/* Render Extension Views if present */}
+            {extensionContributions?.views?.[activeView] && (
+                <div className="sidebar-content" style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1 }}>
+                    <div className="sidebar-section-header" style={{ textTransform: 'uppercase' }}>{activeView}</div>
+                    {extensionContributions.views[activeView].map((view: any) => (
+                        <SidebarPane key={view.id} title={view.name} defaultCollapsed={false}>
+                            <div style={{ padding: '20px', textAlign: 'center', opacity: 0.6, fontSize: '12px' }}>
+                                View: {view.name}<br/>
+                                <span style={{ fontSize: '10px' }}>[Extension Contributed View]</span>
+                            </div>
+                        </SidebarPane>
+                    ))}
+                </div>
+            )}
         </aside>
     );
 };

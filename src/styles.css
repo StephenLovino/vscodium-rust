@@ -9,8 +9,9 @@
   --vscode-activityBar-inactiveForeground: rgba(215, 215, 215, 0.4);
   --vscode-statusBar-background: #007acc;
   --vscode-statusBar-foreground: #ffffff;
-  --vscode-titleBar-activeBackground: #3c3c3c;
+  --vscode-titleBar-activeBackground: #1e1e1e;
   --vscode-titleBar-activeForeground: #cccccc;
+  --vscode-titleBar-border: rgba(128, 128, 128, 0.35);
   --vscode-editorGroupHeader-tabsBackground: #252526;
   --vscode-tab-activeBackground: #1e1e1e;
   --vscode-tab-inactiveBackground: #2d2d2d;
@@ -28,10 +29,12 @@
   /* Layout Metrics (Pixel Perfect VS Code) */
   --activity-bar-width: 48px;
   --status-bar-height: 22px;
-  --title-bar-height: 30px;
+  --title-bar-height: 35px;
   --sidebar-width: 260px;
   --tab-height: 35px;
   --header-height: 35px;
+  --sidebar-header-height: 35px;
+  --pane-header-height: 22px;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", Monaco, Menlo, Consolas, monospace;
@@ -262,7 +265,7 @@ body.resizing * {
   border-radius: 6px;
   padding: 4px 0;
   min-width: 180px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   z-index: 1000;
   margin-top: 4px;
 }
@@ -432,6 +435,34 @@ body.resizing * {
   background-color: var(--vscode-activityBar-foreground);
 }
 
+.activity-item .badge {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  background: var(--vscode-statusBar-background);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 10px;
+  min-width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--vscode-activityBar-background);
+}
+
+.activity-item .badge.dot {
+  min-width: 8px;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  top: 12px;
+  right: 12px;
+}
+
 .activity-item i.codicon {
   font-size: 24px;
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -570,6 +601,60 @@ body.resizing * {
   -webkit-box-orient: vertical;
   margin-top: 4px;
   line-height: 1.3;
+  opacity: 0.8;
+}
+
+/* Theme Picker Overlay Styles (MODERN VS CODE DIALOG) */
+.theme-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 10000;
+  padding-top: 60px;
+}
+
+.theme-picker {
+  background: #252526;
+  border: 1px solid #454545;
+  border-radius: 6px;
+  width: 500px;
+  max-width: 90vw;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #cccccc;
+}
+
+.theme-item {
+  padding: 6px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.1s;
+}
+
+.theme-item:hover {
+  background: #04395e;
+  color: #ffffff;
+}
+
+.theme-label {
+  flex: 1;
+}
+
+.theme-ext {
+  font-size: 11px;
+  opacity: 0.5;
+  margin-left: 10px;
 }
 
 .sidebar-title {
@@ -655,13 +740,13 @@ body.resizing * {
   cursor: pointer;
   margin-top: 6px;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .extension-install-btn:hover {
   background: #2563eb;
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px var(--accent-glow);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* Debug View */
@@ -754,7 +839,7 @@ body.resizing * {
   transform: translateX(-50%);
   height: 34px;
   background: #252526;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   display: flex;
   align-items: center;
   padding: 0 4px;
@@ -1450,39 +1535,120 @@ body {
   border-color: var(--vscode-focusBorder);
 }
 
-/* Extension Marketplace Styles */
+/* Extension Marketplace Styles - IMPROVED RESPONSIVENESS */
 .extension-item {
   border-bottom: 1px solid var(--vscode-panel-border);
   transition: background 0.1s;
+  padding: 12px 14px;
+  display: flex;
+  gap: 12px;
 }
 
 .extension-item:hover {
-  background-color: var(--vscode-list-hoverBackground);
+  background-color: var(--vscode-list-hoverBackground, #2a2d2e);
 }
 
 .extension-item.active {
-  background-color: var(--vscode-list-activeSelectionBackground);
+  background-color: var(--vscode-list-activeSelectionBackground, #094771);
+}
+
+.extension-item .extension-icon-box {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  background: #3c3c3c;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.extension-item .extension-icon-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.extension-item .extension-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.extension-item .extension-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .extension-item .extension-name {
-  color: var(--vscode-foreground);
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.extension-item .extension-version {
+  font-size: 11px;
+  opacity: 0.5;
+  flex-shrink: 0;
 }
 
 .extension-item .extension-publisher {
+  font-size: 12px;
   opacity: 0.7;
+  color: #ccc;
+  margin-top: -2px;
 }
 
 .extension-item .extension-description {
+  font-size: 12px;
   opacity: 0.8;
+  color: #aaa;
+  margin-top: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.4;
 }
 
-.extension-item .extension-actions i:hover {
-  color: var(--vscode-foreground);
-  opacity: 1;
+.extension-item .extension-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.extension-item .extension-stat {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.extension-item .install-btn {
+  margin-top: 10px;
+  padding: 4px 20px;
+  background: #007acc;
+  color: white;
+  border: none;
+  border-radius: 2px;
+  font-size: 12px;
+  cursor: pointer;
+  align-self: flex-start;
+  transition: background 0.2s;
 }
 
 .extension-item .install-btn:hover {
-  background-color: var(--vscode-button-hoverBackground);
+  background-color: #0062a3;
 }
 
 /* Sidebar Customizations */
@@ -1520,4 +1686,178 @@ body {
 
 .accordion-content.collapsed {
   max-height: 0 !important;
+}
+
+/* Antigravity Premium Agent Styles */
+.agent-message {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: text;
+    margin-bottom: 12px;
+    animation: slideInUp 0.3s ease-out;
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes slideInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.thought-overlay {
+    background: rgba(59, 130, 246, 0.08); /* Semi-transparent blue */
+    border: 1px solid rgba(59, 130, 246, 0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    overflow: hidden;
+    transition: all 0.2s;
+}
+
+.thought-overlay:hover {
+    background: rgba(59, 130, 246, 0.12);
+    border-color: rgba(59, 130, 246, 0.4);
+}
+
+.thought-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #60a5fa;
+    font-weight: 500;
+}
+
+.thought-content {
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px;
+    border-radius: 6px;
+    border-left: 2px solid #60a5fa;
+}
+
+.progress-stepper {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 12px 0;
+    padding-left: 4px;
+}
+
+.progress-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.step-number {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.step-content {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.step-content b {
+    color: #fff;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+.assistant-message-box {
+    background: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    position: relative;
+}
+
+.user-message-box {
+    align-self: flex-end;
+    background: rgba(59, 130, 246, 0.12);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-radius: 8px;
+    padding: 10px 14px;
+    max-width: 90%;
+    color: #fff;
+    font-size: 13px;
+    margin-bottom: 12px;
+}
+
+.agent-actions-bar {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    opacity: 0.6;
+}
+
+.action-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: opacity 0.1s;
+}
+
+.action-item:hover {
+    opacity: 1;
+    color: var(--vscode-focusBorder);
+}
+
+.file-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    margin: 4px 0;
+    width: fit-content;
+    cursor: pointer;
+    border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.file-link:hover {
+    background: rgba(59, 130, 246, 0.25);
+}
+
+#active-task-description {
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.radar-pulse {
+    animation: radar-pulse 2s infinite;
+}
+
+@keyframes radar-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(96, 165, 250, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0); }
 }

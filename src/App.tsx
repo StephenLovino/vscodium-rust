@@ -4,6 +4,7 @@ import TitleBar from './components/TitleBar';
 import Workbench from './components/Workbench';
 import StatusBar from './components/StatusBar';
 import './styles.css';
+import './panes.css';
 import { initSearch } from './search';
 import { initStatusBar } from './status_bar';
 import { initExtensions } from './extensions';
@@ -30,7 +31,8 @@ const App: React.FC = () => {
         initTerminal();
 
         // Restore last folder
-        const { activeRoot, refreshFileTree } = useStore.getState();
+        const { activeRoot, refreshFileTree, refreshAvailableModels } = useStore.getState();
+        refreshAvailableModels();
         if (activeRoot) {
             (window as any).activeRoot = activeRoot;
             invoke('set_active_root', { path: activeRoot }).then(() => {

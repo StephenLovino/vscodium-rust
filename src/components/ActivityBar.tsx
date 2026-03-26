@@ -11,7 +11,9 @@ const ActivityBar: React.FC = () => {
     const [installedThemes, setInstalledThemes] = useState<VscodeTheme[]>([]);
     const setTheme = useStore(state => state.setTheme);
 
-    const items = [
+    const extensionItems = useStore(state => state.extensionContributions?.viewsContainers?.activitybar || []);
+
+    const coreItems = [
         { id: 'explorer-view', icon: 'files', title: 'Explorer' },
         { id: 'search-view', icon: 'search', title: 'Search' },
         { id: 'scm-view', icon: 'source-control', title: 'Source Control' },
@@ -21,6 +23,17 @@ const ActivityBar: React.FC = () => {
         { id: 'agent-view', icon: 'sparkle', title: 'Agent' },
         { id: 'planning-view', icon: 'checklist', title: 'Workflow & Planning' },
         { id: 'mobile-view', icon: 'device-mobile', title: 'Mobile Emulators (Android & iOS)' },
+    ];
+
+    const items = [
+        ...coreItems,
+        ...extensionItems.map((ext: any) => ({
+            id: ext.id,
+            icon: ext.icon,
+            title: ext.title,
+            base64_icon: ext.base64_icon,
+            isExtension: true
+        }))
     ];
 
     const openThemePicker = async () => {
@@ -49,11 +62,20 @@ const ActivityBar: React.FC = () => {
                         key={item.id}
                         className={`activity-item ${activeView === item.id ? 'active' : ''}`}
                         title={item.title}
-                        onClick={() => setActiveView(item.id)}
+                        onClick={() => {
+                            setActiveView(item.id);
+                            invoke("check_activation_event", { event: `onView:${item.id}` });
+                        }}
                     >
                         <div className="activity-item-icon">
-                            <i className={`codicon codicon-${item.icon}`}></i>
+                            {item.base64_icon ? (
+                                <img src={item.base64_icon} style={{ width: '24px', height: '24px', opacity: activeView === item.id ? 1 : 0.6 }} />
+                            ) : (
+                                <i className={`codicon codicon-${item.icon}`}></i>
+                            )}
                         </div>
+                        {item.id === 'scm-view' && <div className="badge dot"></div>}
+                        {item.id === 'extensions-view' && <div className="badge">12</div>}
                     </div>
                 ))}
             </div>
@@ -65,7 +87,7 @@ const ActivityBar: React.FC = () => {
                 </div>
                 <div className="activity-item" title="Color Theme" onClick={openThemePicker}>
                     <div className="activity-item-icon">
-                        <i className="codicon codicon-symbol-color"></i>
+                        <i className="codicon codicon-paintcan"></i>
                     </div>
                 </div>
                 <div 
@@ -87,8 +109,10 @@ const ActivityBar: React.FC = () => {
                             Select Color Theme
                         </div>
                         {installedThemes.length === 0 && (
-                            <div style={{ padding: '16px', fontSize: '12px', opacity: 0.7 }}>
-                                No extension themes found. Try installing one from the marketplace.
+                            <div style={{ padding: '20px', fontSize: '12px', opacity: 0.7, textAlign: 'center' }}>
+                                <i className="codicon codicon-info" style={{ fontSize: '24px', display: 'block', marginBottom: '8px' }}></i>
+                                No extension themes found.<br/>
+                                Scanning standard VS Code paths...
                             </div>
                         )}
                         {installedThemes.map((theme, i) => (

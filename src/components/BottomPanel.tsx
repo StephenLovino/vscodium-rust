@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
 import EmulatorPanel from './EmulatorPanel';
+import MitmPanel from './MitmPanel';
 
 const BottomPanel: React.FC = () => {
     const isOpen = useStore(state => state.isBottomPanelOpen);
@@ -75,10 +76,40 @@ const BottomPanel: React.FC = () => {
                     >
                         EMULATOR
                     </div>
-                    <div className="panel-tab" style={{ padding: '0 16px', display: 'flex', alignItems: 'center', opacity: 0.5, fontSize: '11px' }}>OUTPUT</div>
+                    <div 
+                        className={`panel-tab ${activeTab === 'MITM' ? 'active' : ''}`} 
+                        onClick={() => setActiveTab('MITM')}
+                        style={{ 
+                            padding: '0 16px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            borderBottom: activeTab === 'MITM' ? '1px solid var(--vscode-panelTitle-activeBorder)' : 'none',
+                            color: activeTab === 'MITM' ? 'var(--vscode-panelTitle-activeForeground)' : 'var(--vscode-panelTitle-inactiveForeground)',
+                            opacity: activeTab === 'MITM' ? 1 : 0.7
+                        }}
+                    >
+                        MITM PROXY
+                    </div>
+                    <div className="panel-tab" style={{ padding: '0 12px', display: 'flex', alignItems: 'center', opacity: 0.5, fontSize: '11px' }}>PROBLEMS</div>
+                    <div className="panel-tab" style={{ padding: '0 12px', display: 'flex', alignItems: 'center', opacity: 0.5, fontSize: '11px' }}>OUTPUT</div>
+                    <div className="panel-tab" style={{ padding: '0 12px', display: 'flex', alignItems: 'center', opacity: 0.5, fontSize: '11px' }}>DEBUG CONSOLE</div>
+                </div>
+                
+                <div id="terminal-tabs" style={{ 
+                    display: activeTab === 'TERMINAL' ? 'flex' : 'none', 
+                    gap: '2px', 
+                    marginLeft: '8px', 
+                    flex: 1, 
+                    overflowX: 'auto', 
+                    height: '100%', 
+                    alignItems: 'center' 
+                }}>
+                    {/* Tabs will be injected here by TerminalManager */}
                 </div>
 
-                <div style={{ marginLeft: '20px', fontSize: '11px', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ marginLeft: 'auto', fontSize: '11px', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8, display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '12px' }}>
                     <button
                         onClick={handlePing}
                         disabled={isPending}
@@ -97,11 +128,37 @@ const BottomPanel: React.FC = () => {
                     {pingResult && <span style={{ color: '#4ec9b0' }}>{pingResult}</span>}
                 </div>
 
-                <div id="terminal-tabs" style={{ display: 'flex', gap: '4px', marginLeft: 'auto', padding: '0 10px', alignItems: 'center' }}>
-                    <button className="icon-btn" style={{ background: 'none', border: 'none', color: 'var(--vscode-sideBar-foreground)', cursor: 'pointer', opacity: 0.8 }}>
-                        <i className="codicon codicon-add"></i>
-                    </button>
-                </div>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <button 
+                            className="icon-btn" 
+                            id="new-terminal"
+                            onClick={() => (window as any).spawnTerminal()}
+                            style={{ background: 'none', border: 'none', color: 'var(--vscode-sideBar-foreground)', cursor: 'pointer', opacity: 0.8, padding: '2px 6px' }}
+                        >
+                            <i className="codicon codicon-add"></i>
+                        </button>
+                        <select
+                            onChange={(e) => {
+                                if (e.target.value) {
+                                    (window as any).spawnTerminal(e.target.value);
+                                    e.target.value = ""; // Reset
+                                }
+                            }}
+                            style={{
+                                position: 'absolute',
+                                right: 0,
+                                opacity: 0,
+                                width: '24px',
+                                height: '24px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="">Select Shell...</option>
+                            <option value="powershell">PowerShell</option>
+                            <option value="cmd">Command Prompt</option>
+                            <option value="bash">Git Bash</option>
+                        </select>
+                    </div>
             </div>
             <div className="panel-content" id="panel-content" style={{ flex: 1, position: 'relative', overflow: 'hidden', background: 'var(--vscode-editor-background)', padding: 0 }}>
                 <div 
@@ -115,6 +172,11 @@ const BottomPanel: React.FC = () => {
                 {activeTab === 'EMULATOR' && (
                     <div style={{ width: '100%', height: '100%' }}>
                         <EmulatorPanel />
+                    </div>
+                )}
+                {activeTab === 'MITM' && (
+                    <div style={{ width: '100%', height: '100%' }}>
+                        <MitmPanel />
                     </div>
                 )}
             </div>

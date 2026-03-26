@@ -1,5 +1,6 @@
 import React from 'react';
 import { useStore } from '../store';
+import { invoke } from '@tauri-apps/api/core';
 
 const StatusBar: React.FC = () => {
     const theme = useStore(state => state.theme);
@@ -13,6 +14,21 @@ const StatusBar: React.FC = () => {
         const next = themes[(themes.indexOf(theme) + 1) % themes.length];
         setTheme(next);
     };
+
+    const handleOptimize = async () => {
+        try {
+            await invoke('optimize_memory');
+            console.log('App memory optimized');
+        } catch (e) {
+            console.error('Failed to optimize memory:', e);
+        }
+    };
+
+    React.useEffect(() => {
+        // Auto-optimize memory every 5 minutes
+        const timer = setInterval(handleOptimize, 5 * 60 * 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     return (
         <footer className="status-bar" style={{
@@ -28,40 +44,35 @@ const StatusBar: React.FC = () => {
             userSelect: 'none'
         }}>
             <div className="status-left" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
-                <div className="status-item hoverable" onClick={() => setActiveSidebarView('scm-view')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
-                    <i className="codicon codicon-source-control" style={{ fontSize: '13px', marginRight: '4px' }}></i>main*
+                <div className="status-item hoverable" onClick={() => setActiveSidebarView('scm-view')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 6px' }}>
+                    <i className="codicon codicon-source-control" style={{ fontSize: '12px', marginRight: '4px' }}></i>main*
                 </div>
-                <div className="status-item hoverable" onClick={() => {}} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
-                    <i className="codicon codicon-sync" style={{ fontSize: '13px' }}></i>
+                <div className="status-item hoverable" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 6px', opacity: 0.8 }}>
+                    <i className="codicon codicon-sync" style={{ fontSize: '12px' }}></i>
                 </div>
-                <div className="status-item hoverable" onClick={() => {}} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
-                    <i className="codicon codicon-error" style={{ fontSize: '13px', marginRight: '3px' }}></i>0
-                    <i className="codicon codicon-warning" style={{ fontSize: '13px', marginLeft: '6px', marginRight: '3px' }}></i>0
+                <div className="status-item hoverable" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 6px' }}>
+                    <i className="codicon codicon-error" style={{ fontSize: '12px', marginRight: '2px' }}></i>0
+                    <i className="codicon codicon-warning" style={{ fontSize: '12px', marginLeft: '6px', marginRight: '2px' }}></i>0
                 </div>
-                <div className="status-item hoverable" onClick={() => setActiveSidebarView('agent-view')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
-                    <i className="codicon codicon-sparkle" style={{ fontSize: '13px', marginRight: '4px' }}></i>
-                    <span>{agentModel.split('|').pop() || 'GPT-4o'}</span>
-                </div>
-                <div className="status-item hoverable" onClick={() => setActiveSidebarView('mobile-view')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
-                    <i className="codicon codicon-device-mobile" style={{ fontSize: '13px', marginRight: '4px' }}></i>
-                    <span>No Device</span>
-                </div>
-                <div className="status-item hoverable" onClick={() => window.open('https://buymeacoffee.com/H4D3ZS', '_blank')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px', color: '#ff813f' }}>
-                    <i className="codicon codicon-heart" style={{ fontSize: '13px', marginRight: '4px' }}></i>
+                <div className="status-item hoverable" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 10px', color: '#ff813f' }}>
+                    <i className="codicon codicon-heart" style={{ fontSize: '12px', marginRight: '4px' }}></i>
                     <span>Support</span>
                 </div>
             </div>
             <div className="status-right" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px', opacity: 0.9 }}>
+                    <i className="codicon codicon-broadcast" style={{ fontSize: '12px', marginRight: '6px' }} />Discord RPC
+                </div>
                 <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>Ln 1, Col 1</div>
                 <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>Spaces: 4</div>
                 <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>UTF-8</div>
-                <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>Rust</div>
+                <div className="status-item hoverable" onClick={handleOptimize} style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px', color: '#89d185' }}>
+                    <i className="codicon codicon-dashboard" style={{ fontSize: '12px', marginRight: '6px' }} />
+                    <span>Optimize</span>
+                </div>
                 <div className="status-item hoverable" onClick={toggleTheme} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
                     <i className="codicon codicon-color-mode" style={{ marginRight: '4px' }}></i>
                     <span>{theme}</span>
-                </div>
-                <div className="status-item hoverable" onClick={toggleBottomPanel} title="Toggle Terminal" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
-                    <i className="codicon codicon-terminal" style={{ fontSize: '14px' }}></i>
                 </div>
             </div>
         </footer>

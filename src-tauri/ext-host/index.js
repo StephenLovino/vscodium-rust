@@ -42,11 +42,32 @@ const vscodeImpl = {
         showErrorMessage: (msg) => {
             sendResponse({ type: 'notification', level: 'error', message: msg });
         },
+        showWarningMessage: (msg) => {
+            sendResponse({ type: 'notification', level: 'warning', message: msg });
+        },
+        createTextEditorDecorationType: () => ({ dispose: () => { } }),
+        createOutputChannel: (name) => ({
+            name,
+            append: (val) => console.error(`[Output:${name}] ${val}`),
+            appendLine: (val) => console.error(`[Output:${name}] ${val}`),
+            clear: () => { },
+            show: () => { },
+            hide: () => { },
+            dispose: () => { }
+        }),
         get activeTextEditor() {
             if (vscodeImpl.workspace.textDocuments.length > 0) {
-                return { document: vscodeImpl.workspace.textDocuments[0] };
+                return { 
+                    document: vscodeImpl.workspace.textDocuments[0],
+                    setDecorations: () => {}
+                };
             }
             return undefined;
+        },
+        visibleTextEditors: [],
+        onDidChangeActiveTextEditor: (cb) => {
+            eventHandlers.on('onDidChangeActiveTextEditor', cb);
+            return { dispose: () => {} };
         }
     },
     commands: {
@@ -54,14 +75,30 @@ const vscodeImpl = {
             commands.set(id, callback);
             sendResponse({ type: 'commandRegistered', id });
             return { dispose: () => commands.delete(id) };
+        },
+        executeCommand: async (id, ...args) => {
+            return await sendRequest({ type: 'executeCommand', id, args });
         }
     },
     workspace: {
         textDocuments: [],
+        rootPath: process.cwd(),
+        workspaceFolders: [{ uri: { fsPath: process.cwd() }, name: path.basename(process.cwd()), index: 0 }],
         fs: {
             readFile: async (uri) => {
                 return await sendRequest({ type: 'workspace.readFile', uri });
+            },
+            stat: async (uri) => {
+                return await sendRequest({ type: 'workspace.stat', uri });
             }
+        },
+        getConfiguration: (section) => {
+            return {
+                get: (key) => undefined,
+                has: (key) => false,
+                update: (key, value) => { },
+                inspect: (key) => undefined
+            };
         },
         onDidChangeTextDocument: (callback) => {
             eventHandlers.on('onDidChangeTextDocument', callback);
@@ -72,20 +109,30 @@ const vscodeImpl = {
             return { dispose: () => { } };
         }
     },
-    debug: {
-        activeDebugSession: undefined,
-        startDebugging: async (folder, nameOrConfiguration) => {
-            let adapter = "lldb-vscode";
-            if (typeof nameOrConfiguration === 'object' && nameOrConfiguration.type) {
-                adapter = nameOrConfiguration.type;
-            }
-            await sendRequest({ type: 'debug.start', adapter });
-            return true;
-        },
-        onDidStartDebugSession: (callback) => {
-            eventHandlers.on('onDidStartDebugSession', callback);
-            return { dispose: () => { } };
-        }
+    languages: {
+        registerCompletionItemProvider: () => ({ dispose: () => {} }),
+        registerDefinitionProvider: () => ({ dispose: () => {} }),
+        registerHoverProvider: () => ({ dispose: () => {} }),
+        createDiagnosticCollection: () => ({ 
+            set: () => {}, 
+            delete: () => {}, 
+            clear: () => {}, 
+            dispose: () => {} 
+        })
+    },
+    env: {
+        language: 'en',
+        appName: 'VSCodium Rust',
+        appRoot: __dirname,
+        machineId: '1234',
+        sessionId: '5678'
+    },
+    scm: {
+        createSourceControl: (id, label) => ({
+            id, label, 
+            createResourceGroup: () => ({ resourceStates: [], dispose: () => {} }),
+            dispose: () => {}
+        })
     },
     version: '1.85.0'
 };

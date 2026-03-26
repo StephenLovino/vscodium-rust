@@ -19,7 +19,8 @@
         "width": 1024,
         "height": 768,
         "hiddenTitle": true,
-        "titleBarStyle": "Overlay"
+        "titleBarStyle": "Overlay",
+        "additionalBrowserArgs": "--process-per-site --renderer-process-limit=1 --disable-features=SharedArrayBuffer --disable-gpu-shader-disk-cache"
       }
     ],
     "security": {

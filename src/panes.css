@@ -1,0 +1,96 @@
+/* Pane Items (Open Editors, Tree Items) */
+.pane-item {
+  display: flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--vscode-sideBar-foreground);
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.pane-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.pane-item.active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
+.pane-item .codicon {
+  font-size: 16px;
+  width: 16px;
+  text-align: center;
+}
+
+.pane-item .close-icon {
+  margin-left: auto;
+  opacity: 0;
+  font-size: 14px;
+}
+
+.pane-item:hover .close-icon {
+  opacity: 1;
+}
+
+/* Pane Headers */
+.pane-header {
+  height: var(--pane-header-height, 22px);
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  background-color: var(--vscode-sideBarSectionHeader-background, rgba(255, 255, 255, 0.05));
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--vscode-sideBarSectionHeader-foreground, var(--vscode-sideBar-foreground));
+  cursor: pointer;
+  border-top: 1px solid var(--vscode-panel-border);
+  letter-spacing: 0.2px;
+}
+
+.pane-header:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.pane-header .codicon {
+  font-size: 14px;
+  margin-right: 4px;
+  transition: transform 0.1s;
+  width: 16px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+.pane-header.collapsed .codicon {
+  transform: rotate(-90deg);
+}
+
+/* Tree Rows (Explorer) */
+.tree-row {
+  transition: background-color 0.1s;
+}
+
+.tree-row:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.tree-row.active {
+  background-color: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground) !important;
+}
+
+.tree-row:focus-within {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}

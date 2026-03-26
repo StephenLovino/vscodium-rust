@@ -43,6 +43,10 @@ interface AppState {
     activeRootName: string | null;
     activeDevice: string | null;
     emulators: string[];
+    availableModels: { id: string, provider: string }[];
+    extensionContributions: any;
+    mitmStatus: 'idle' | 'running' | 'error';
+    mitmLogs: string[];
 
     // Actions
     toggleSidebar: () => void;
@@ -63,6 +67,8 @@ interface AppState {
     setActiveRoot: (path: string | null) => void;
     setActiveDevice: (id: string | null) => void;
     setEmulators: (ems: string[]) => void;
+    setExtensionContributions: (contributions: any) => void;
+    refreshAvailableModels: () => Promise<void>;
     refreshFileTree: () => Promise<void>;
     closeFolder: () => void;
     openFile: (path: string) => Promise<void>;
@@ -74,6 +80,9 @@ interface AppState {
 
     // Backend Actions
     backendPing: () => Promise<string>;
+    startMitm: () => Promise<void>;
+    stopMitm: () => Promise<void>;
+    addMitmLog: (log: string) => void;
 }
 
 function detectLanguage(filename: string): string {
@@ -114,6 +123,13 @@ export const useStore = create<AppState>((set, get) => ({
     activeRootName: localStorage.getItem('activeRootName'),
     activeDevice: null,
     emulators: [],
+    availableModels: [],
+    extensionContributions: {
+        viewsContainers: { activitybar: [] },
+        views: {}
+    },
+    mitmStatus: 'idle',
+    mitmLogs: [],
 
     // Actions
     toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
@@ -142,7 +158,7 @@ export const useStore = create<AppState>((set, get) => ({
     setAgentModel: (agentModel) => set({ agentModel }),
     setActiveRoot: (path) => {
         if (path) {
-            const name = path.split('/').pop() || path;
+            const name = path.replace(/\\/g, '/').split('/').pop() || path;
             localStorage.setItem('activeRoot', path);
             localStorage.setItem('activeRootName', name);
             set({ activeRoot: path, activeRootName: name });
@@ -154,6 +170,7 @@ export const useStore = create<AppState>((set, get) => ({
     },
     setActiveDevice: (activeDevice) => set({ activeDevice }),
     setEmulators: (emulators) => set({ emulators }),
+    setExtensionContributions: (extensionContributions) => set({ extensionContributions }),
 
     refreshFileTree: async () => {
         try {
@@ -181,7 +198,7 @@ export const useStore = create<AppState>((set, get) => ({
         }
         try {
             const content = await invoke<string>('read_file', { path });
-            const filename = path.split('/').pop() ?? path;
+            const filename = path.replace(/\\/g, '/').split('/').pop() ?? path;
             const id = `tab-${Date.now()}-${Math.random()}`;
             const tab: EditorTab = { id, filename, path, content, isModified: false, language: detectLanguage(filename) };
             set((state) => ({ tabs: [...state.tabs, tab], activeTabId: id }));
@@ -251,6 +268,57 @@ export const useStore = create<AppState>((set, get) => ({
             return `Error: ${error}`;
         }
     },
+
+    refreshAvailableModels: async () => {
+        try {
+            const keys: any = await invoke('get_api_keys');
+            const providers = [];
+            if (keys.google) providers.push('Google');
+            if (keys.anthropic) providers.push('Anthropic');
+            if (keys.openai) providers.push('OpenAI');
+            if (keys.alibaba) providers.push('Alibaba');
+            if (keys.xai) providers.push('xAI');
+            if (keys.apiradar || true) providers.push('ApiRadar'); // Always include for free models
+
+            let allModels: { id: string, provider: string }[] = [];
+            for (const p of providers) {
+                try {
+                    const models = await invoke<string[]>('list_provider_models', { provider: p });
+                    allModels = [...allModels, ...models.map(m => ({ id: m, provider: p.toLowerCase() }))];
+                } catch (e) {
+                    console.error(`Failed to fetch models for ${p}:`, e);
+                }
+            }
+            set({ availableModels: allModels });
+        } catch (e) {
+            console.error('Refresh Available Models Error:', e);
+        }
+    },
+
+    startMitm: async () => {
+        try {
+            set({ mitmStatus: 'running' });
+            await invoke('start_mitm_server');
+            get().addMitmLog('Proxy server started on port 8080');
+        } catch (e: any) {
+            set({ mitmStatus: 'error' });
+            get().addMitmLog(`Error: ${e}`);
+        }
+    },
+
+    stopMitm: async () => {
+        try {
+            await invoke('stop_mitm_server');
+            set({ mitmStatus: 'idle' });
+            get().addMitmLog('Proxy server stopped');
+        } catch (e: any) {
+            get().addMitmLog(`Error stopping server: ${e}`);
+        }
+    },
+
+    addMitmLog: (log) => set((state) => ({ 
+        mitmLogs: [...state.mitmLogs, `[${new Date().toLocaleTimeString()}] ${log}`].slice(-100) 
+    })),
 }));
 
 if (typeof window !== 'undefined') {

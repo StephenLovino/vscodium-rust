@@ -5,6 +5,7 @@ export function initExtensions() {
     console.log("DEBUG: initExtensions called");
     const searchInput = document.getElementById("extensions-search-input") as HTMLInputElement;
     const marketplaceList = document.getElementById("marketplace-extensions-list");
+    const recommendedList = document.getElementById("recommended-extensions-list");
     const installedList = document.getElementById("installed-extensions-list");
 
     if (searchInput && marketplaceList) {
@@ -17,9 +18,9 @@ export function initExtensions() {
                 marketplaceList.innerHTML = '<div style="padding: 10px; color: var(--text-secondary);">Searching Marketplace...</div>';
 
                 try {
-                    const results = await invoke<any>("search_marketplace", { query });
+                    const results = await invoke<any[]>("search_extensions", { query });
                     console.log("DEBUG: Marketplace results:", results);
-                    renderMarketplace(results.results, marketplaceList);
+                    renderMarketplace(results, marketplaceList);
                 } catch (err) {
                     console.error("Marketplace search failed:", err);
                     marketplaceList.innerHTML = `<div style="padding: 10px; color: #f48771;">Search error: ${err}</div>`;
@@ -29,6 +30,7 @@ export function initExtensions() {
     }
 
     const installedHeader = document.getElementById("installed-accordion-header");
+    const recommendedHeader = document.getElementById("recommended-accordion-header");
     const marketplaceHeader = document.getElementById("marketplace-accordion-header");
     const marketplaceContent = document.getElementById("marketplace-extensions-list");
 
@@ -36,6 +38,17 @@ export function initExtensions() {
         installedHeader.onclick = () => {
             installedList.classList.toggle("collapsed");
             const icon = installedHeader.querySelector(".accordion-icon");
+            if (icon) {
+                icon.classList.toggle("codicon-chevron-down");
+                icon.classList.toggle("codicon-chevron-right");
+            }
+        };
+    }
+
+    if (recommendedHeader && recommendedList) {
+        recommendedHeader.onclick = () => {
+            recommendedList.classList.toggle("collapsed");
+            const icon = recommendedHeader.querySelector(".accordion-icon");
             if (icon) {
                 icon.classList.toggle("codicon-chevron-down");
                 icon.classList.toggle("codicon-chevron-right");
@@ -69,7 +82,7 @@ export function initExtensions() {
                 if (selected) {
                     const filePath = Array.isArray(selected) ? selected[0] : selected;
                     console.log("Installing VSIX from:", filePath);
-                    await invoke("install_vsix", { filePath });
+                    await invoke("install_vsix", { path: filePath });
                     console.log("VSIX installed successfully");
                     refreshInstalledExtensions();
                 }
@@ -95,10 +108,73 @@ export async function refreshInstalledExtensions() {
         if (iconThemeMapping) {
             (window as any).useStore.getState().setIconThemeMapping(iconThemeMapping);
         }
+
+        // Parse contributions for Activity Bar and Sidebars
+        const contributions = {
+            viewsContainers: { activitybar: [] as any[] },
+            views: {} as Record<string, any[]>
+        };
+
+        extensions.forEach(ext => {
+            if (ext.contributes) {
+                const contrib = ext.contributes;
+                
+                // Activity Bar containers
+                if (contrib.viewsContainers?.activitybar) {
+                    contrib.viewsContainers.activitybar.forEach((container: any) => {
+                        contributions.viewsContainers.activitybar.push({
+                            ...container,
+                            extensionPath: ext.extensionPath,
+                            publisher: ext.publisher,
+                            extensionName: ext.id
+                        });
+                    });
+                }
+
+                // Sidebar views
+                if (contrib.views) {
+                    Object.keys(contrib.views).forEach(location => {
+                        if (!contributions.views[location]) contributions.views[location] = [];
+                        contrib.views[location].forEach((view: any) => {
+                           contributions.views[location].push({
+                               ...view,
+                               extensionPath: ext.extensionPath
+                           });
+                        });
+                    });
+                }
+            }
+        });
+
+        (window as any).useStore.getState().setExtensionContributions(contributions);
     } catch (err) {
         console.error("Failed to get installed extensions or icon themes:", err);
     }
+
+    // Load recommended/popular extensions
+    const recommendedList = document.getElementById("recommended-extensions-list");
+    if (recommendedList) {
+        loadRecommendedExtensions(recommendedList);
+    }
+
+    const marketplaceList = document.getElementById("marketplace-extensions-list");
+    if (marketplaceList) {
+        // marketplaceList.innerHTML = '<div style="padding: 10px; opacity: 0.5;">Search to find more...</div>';
+    }
 }
+
+async function loadRecommendedExtensions(container: HTMLElement) {
+    try {
+        const results = await invoke<any[]>("get_popular_extensions");
+        renderMarketplace(results, container);
+        const badge = document.getElementById("recommended-count-badge");
+        if (badge) badge.innerText = results.length.toString();
+    } catch (err) {
+        console.error("Failed to load recommended extensions:", err);
+    }
+}
+
+
 
 function renderMarketplace(extensions: any[], container: HTMLElement) {
     container.innerHTML = "";
@@ -111,30 +187,28 @@ function renderMarketplace(extensions: any[], container: HTMLElement) {
         const item = document.createElement("div");
         item.className = "extension-item";
         
-        const icon = ext.files?.icon || "https://open-vsx.org/api/icons/default.png";
+        const icon = ext.iconUrl || ext.icon_url || "https://open-vsx.org/api/icons/default.png";
         const downloads = ext.downloadCount ? (ext.downloadCount > 1000 ? (ext.downloadCount / 1000).toFixed(1) + "k" : ext.downloadCount) : "0";
         const rating = ext.averageRating ? ext.averageRating.toFixed(1) : "0.0";
 
         item.innerHTML = `
-            <div class="extension-item-main" style="display: flex; gap: 12px; padding: 10px 12px; cursor: pointer;">
-                <img src="${icon}" style="width: 42px; height: 42px; flex-shrink: 0; border-radius: 4px;" onerror="this.src='https://open-vsx.org/api/icons/default.png'" />
-                <div class="extension-info" style="flex: 1; min-width: 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 4px;">
-                        <div class="extension-name" style="font-weight: 600; font-size: 13px; color: var(--vscode-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ext.displayName || ext.name}</div>
-                        <div class="extension-version" style="font-size: 11px; opacity: 0.6; flex-shrink: 0;">v${ext.version}</div>
-                    </div>
-                    <div class="extension-publisher" style="font-size: 11px; color: var(--vscode-sideBar-foreground); opacity: 0.7;">${ext.namespace}</div>
-                    <div class="extension-description" style="font-size: 12px; margin-top: 2px; color: var(--vscode-sideBar-foreground); opacity: 0.8; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3;">${ext.description || "No description provided."}</div>
-                    
-                    <div class="extension-stats" style="display: flex; align-items: center; gap: 12px; margin-top: 6px; font-size: 11px; opacity: 0.6;">
-                        <span style="display: flex; align-items: center; gap: 4px;"><i class="codicon codicon-cloud-download"></i> ${downloads}</span>
-                        <span style="display: flex; align-items: center; gap: 4px;"><i class="codicon codicon-star-full" style="color: #f1c40f;"></i> ${rating}</span>
-                    </div>
-
-                    <div class="extension-actions" style="margin-top: 8px;">
-                        <button class="install-btn" style="padding: 4px 12px; background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: none; border-radius: 2px; font-size: 12px; cursor: pointer; width: 100%; transition: background 0.1s;">Install</button>
-                    </div>
+            <div class="extension-icon-box">
+                <img src="${icon}" onerror="this.src='https://open-vsx.org/api/icons/default.png'" />
+            </div>
+            <div class="extension-main">
+                <div class="extension-header">
+                    <div class="extension-name">${ext.displayName || ext.name}</div>
+                    <div class="extension-version">v${ext.version}</div>
                 </div>
+                <div class="extension-publisher">${ext.publisher || ext.namespace}</div>
+                <div class="extension-description">${ext.description || "No description provided."}</div>
+                
+                <div class="extension-footer">
+                    <span class="extension-stat"><i class="codicon codicon-cloud-download"></i> ${downloads}</span>
+                    <span class="extension-stat"><i class="codicon codicon-star-full" style="color: #f1c40f;"></i> ${rating}</span>
+                </div>
+
+                <button class="install-btn">Install</button>
             </div>
         `;
 
@@ -149,14 +223,20 @@ function renderMarketplace(extensions: any[], container: HTMLElement) {
             installBtn.disabled = true;
             installBtn.style.opacity = "0.7";
             try {
-                const downloadUrl = ext.files.download;
-                await invoke("install_extension", { downloadUrl, name: `${ext.namespace}.${ext.name}` });
+                await invoke("install_extension", { 
+                    publisher: ext.publisher || ext.namespace, 
+                    name: ext.name, 
+                    version: ext.version 
+                });
                 installBtn.innerText = "Installed";
                 installBtn.disabled = true;
                 installBtn.style.background = "transparent";
                 installBtn.style.color = "var(--vscode-button-background)";
                 installBtn.style.border = "1px solid var(--vscode-button-background)";
-                refreshInstalledExtensions();
+                
+                // Proactively apply the extension effects
+                await refreshInstalledExtensions();
+                console.log("Extension applied automatically");
             } catch (err) {
                 console.error("Installation failed:", err);
                 installBtn.innerText = "Error";
@@ -176,6 +256,8 @@ function renderMarketplace(extensions: any[], container: HTMLElement) {
 
 function renderInstalled(extensions: any[], container: HTMLElement) {
     container.innerHTML = "";
+    const badge = document.getElementById("installed-count-badge");
+    if (badge) badge.innerText = (extensions?.length || 0).toString();
     if (!extensions || extensions.length === 0) {
         container.innerHTML = '<div style="padding: 10px; color: var(--vscode-sideBar-foreground); opacity: 0.5; font-size: 12px; text-align: center;">No extensions installed.</div>';
         return;
@@ -186,24 +268,26 @@ function renderInstalled(extensions: any[], container: HTMLElement) {
         item.className = "extension-item installed";
         
         const iconHtml = ext.base64_icon 
-            ? `<img src="${ext.base64_icon}" style="width: 32px; height: 32px; flex-shrink: 0; border-radius: 4px;" />`
-            : `<i class="codicon codicon-extensions" style="font-size: 32px; color: var(--vscode-button-background);"></i>`;
+            ? `<img src="${ext.base64_icon}" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />`
+            : ``;
+        const fallbackIcon = `<i class="codicon codicon-extensions" style="font-size: 32px; color: #007acc; ${ext.base64_icon ? 'display: none;' : ''}"></i>`;
 
         item.innerHTML = `
-            <div style="display: flex; gap: 12px; padding: 8px 12px; cursor: pointer;">
+            <div class="extension-icon-box">
                 ${iconHtml}
-                <div class="extension-info" style="flex: 1; min-width: 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 4px;">
-                        <div class="extension-name" style="font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground);">${ext.name}</div>
-                        <div class="extension-version" style="font-size: 11px; opacity: 0.6; flex-shrink: 0;">v${ext.version}</div>
-                    </div>
-                    <div class="extension-publisher" style="font-size: 11px; opacity: 0.7; color: var(--vscode-sideBar-foreground);">${ext.publisher}</div>
-                    <div class="extension-description" style="font-size: 12px; margin-top: 2px; color: var(--vscode-sideBar-foreground); opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${ext.description || ""}</div>
-                    <div class="extension-actions" style="margin-top: 6px; display: flex; gap: 12px; opacity: 0.6;">
-                         <i class="codicon codicon-settings" style="font-size: 14px; cursor: pointer;" title="Extension Settings"></i>
-                         <i class="codicon codicon-debug-pause" style="font-size: 14px; cursor: pointer;" title="Disable Extension"></i>
-                         <i class="codicon codicon-trash" style="font-size: 14px; cursor: pointer;" title="Uninstall"></i>
-                    </div>
+                ${fallbackIcon}
+            </div>
+            <div class="extension-main">
+                <div class="extension-header">
+                    <div class="extension-name">${ext.name}</div>
+                    <div class="extension-version">v${ext.version}</div>
+                </div>
+                <div class="extension-publisher">${ext.publisher}</div>
+                <div class="extension-description">${ext.description || ""}</div>
+                <div class="extension-footer">
+                     <i class="codicon codicon-settings" style="cursor: pointer;" title="Extension Settings"></i>
+                     <i class="codicon codicon-debug-pause" style="cursor: pointer;" title="Disable Extension"></i>
+                     <i class="codicon codicon-trash" style="cursor: pointer;" title="Uninstall"></i>
                 </div>
             </div>
         `;

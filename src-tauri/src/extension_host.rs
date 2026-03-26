@@ -27,19 +27,22 @@ pub struct ExtensionHostManager {
     child: Option<Child>,
     stdin: Option<std::process::ChildStdin>,
     pub extensions: Vec<ExtensionMetadata>,
+    pub extensions_dir: PathBuf,
 }
 
 impl ExtensionHostManager {
-    pub fn new() -> Self {
+    pub fn new(extensions_dir: PathBuf) -> Self {
         Self {
             child: None,
             stdin: None,
             extensions: Vec::new(),
+            extensions_dir,
         }
     }
 
     #[allow(dead_code)]
-    pub fn scan_extensions(&mut self, base_dir: PathBuf) -> std::io::Result<()> {
+    pub fn scan_extensions(&mut self) -> std::io::Result<()> {
+        let base_dir = self.extensions_dir.clone();
         if !base_dir.exists() {
             std::fs::create_dir_all(&base_dir)?;
         }

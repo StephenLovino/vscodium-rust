@@ -71,61 +71,80 @@ const EmulatorPanel: React.FC = () => {
     const isIPhone = activeDevice?.includes("iPhone") || activeDevice?.includes("iOS");
 
     return (
-        <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', background: '#1a1a1a', overflow: 'hidden' }}>
-            <div className="emulator-controls" style={{ width: '100%', padding: '4px 12px', background: 'var(--vscode-panel-background)', borderBottom: '1px solid var(--vscode-panel-border)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', background: 'var(--vscode-editor-background)', overflow: 'hidden' }}>
+            <div className="emulator-controls" style={{ width: '100%', padding: '4px 12px', background: 'var(--vscode-panel-background)', borderBottom: '1px solid var(--vscode-panel-border)', display: 'flex', alignItems: 'center', gap: '12px', zIndex: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: isIPhone ? '#3498db' : '#4ec9b0' }}></div>
-                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--vscode-sideBar-foreground)' }}>{activeDevice}</span>
+                    <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--vscode-sideBar-foreground)', opacity: 0.8 }}>{activeDevice}</span>
                 </div>
                 <div style={{ flex: 1 }}></div>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                     {!isIPhone && <i className="codicon codicon-refresh" style={{ fontSize: '12px', cursor: 'pointer', opacity: 0.8 }} title="Refresh Stream" onClick={() => setScreenshot(null)}></i>}
+                     <i className="codicon codicon-refresh" style={{ fontSize: '12px', cursor: 'pointer', opacity: 0.8 }} title="Refresh Stream" onClick={() => setScreenshot(null)}></i>
                      <i className="codicon codicon-screen-full" style={{ fontSize: '12px', cursor: 'pointer', opacity: 0.8 }} title="Fit to Screen"></i>
                 </div>
             </div>
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '15px', position: 'relative', overflow: 'auto' }}>
+            
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', padding: '20px', position: 'relative', overflow: 'auto', perspective: '1000px' }}>
                 {isIPhone ? (
-                     <div style={{ 
+                     <div className="device-frame-ios" style={{ 
                         width: '280px', 
                         height: '580px', 
                         background: '#000', 
                         borderRadius: '40px', 
                         border: '8px solid #222', 
                         position: 'relative',
-                        boxShadow: '0 0 50px rgba(0,0,0,0.8)',
+                        boxShadow: '0 30px 60px rgba(0,0,0,0.8)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '20px'
+                        justifyContent: 'center'
                      }}>
                         <div style={{ width: '120px', height: '24px', background: '#222', borderRadius: '0 0 15px 15px', position: 'absolute', top: 0 }}></div>
                         <i className="codicon codicon-device-mobile" style={{ fontSize: '64px', color: '#fff', opacity: 0.2 }}></i>
                         <div style={{ color: '#fff', textAlign: 'center', padding: '0 40px' }}>
-                            <div style={{ fontWeight: 600, fontSize: '16px', marginBottom: '8px' }}>Virtual iPhone (JB)</div>
-                            <div style={{ fontSize: '12px', opacity: 0.6, color: '#3498db', fontWeight: 700 }}>READY</div>
-                            <div style={{ fontSize: '11px', opacity: 0.4, marginTop: '20px' }}>Upload app builds via ADB/Bridge to initiate stream.</div>
+                            <div style={{ fontWeight: 600, fontSize: '16px', marginBottom: '8px' }}>Virtual iOS</div>
+                            <div style={{ fontSize: '11px', opacity: 0.4 }}>Direct stream requires local bridge.</div>
                         </div>
                      </div>
-                ) : screenshot ? (
-                    <img 
-                        ref={imgRef}
-                        src={screenshot} 
-                        onClick={handleInteraction}
-                        style={{ 
-                            maxHeight: '100%', 
-                            maxWidth: '100%', 
-                            cursor: 'pointer', 
-                            boxShadow: '0 0 30px rgba(0,0,0,0.7)',
-                            borderRadius: '8px',
-                            border: '4px solid #333'
-                        }} 
-                        alt="emulator"
-                    />
                 ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-                        <div className="codicon codicon-loading codicon-modifier-spin" style={{ fontSize: '24px', color: 'var(--vscode-progressBar-background)' }}></div>
-                        <div style={{ color: 'var(--vscode-sideBar-foreground)', opacity: 0.8, fontSize: '12px' }}>{error ? `Connection lost: ${error}` : 'Connecting to device stream...'}</div>
+                    <div className="device-frame-android" style={{ 
+                        width: '300px', 
+                        height: '620px', 
+                        background: '#111', 
+                        borderRadius: '32px', 
+                        border: '10px solid #222', 
+                        position: 'relative',
+                        boxShadow: '0 40px 80px rgba(0,0,0,0.9)',
+                        display: 'flex',
+                        flexDirection: 'column'
+                    }}>
+                        {/* Speaker Grill */}
+                        <div style={{ width: '50px', height: '4px', background: '#333', borderRadius: '2px', position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)' }}></div>
+                        
+                        {/* Screen Area */}
+                        <div style={{ flex: 1, margin: '20px 0', background: '#000', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {screenshot ? (
+                                <img 
+                                    ref={imgRef}
+                                    src={screenshot} 
+                                    onClick={handleInteraction}
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'pointer' }} 
+                                    alt="android-emulator"
+                                />
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                                    <div className="codicon codicon-loading codicon-modifier-spin" style={{ fontSize: '24px', color: 'var(--vscode-progressBar-background)' }}></div>
+                                    <div style={{ color: '#fff', opacity: 0.5, fontSize: '11px' }}>{error ? 'Connect failed' : 'Booting...'}</div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Navigation Buttons */}
+                        <div style={{ height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '0 60px', borderTop: '1px solid #222' }}>
+                            <i className="codicon codicon-triangle-left" style={{ fontSize: '18px', color: '#fff', opacity: 0.4, cursor: 'pointer' }}></i>
+                            <i className="codicon codicon-circle-outline" style={{ fontSize: '18px', color: '#fff', opacity: 0.4, cursor: 'pointer' }}></i>
+                            <i className="codicon codicon-debug-step-over" style={{ fontSize: '18px', color: '#fff', opacity: 0.4, cursor: 'pointer', transform: 'rotate(90deg)' }}></i>
+                        </div>
                     </div>
                 )}
             </div>
