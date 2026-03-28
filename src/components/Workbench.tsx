@@ -121,7 +121,7 @@ const Workbench: React.FC = () => {
                             </div>
 
                             {/* Breadcrumbs */}
-                            <div className="breadcrumbs" id="breadcrumbs" style={{ height: '22px', borderBottom: '1px solid var(--vscode-panel-border)', display: 'flex', alignItems: 'center', padding: '0 16px', fontSize: '12px', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8 }}>
+                            <div className="breadcrumbs" id="breadcrumbs">
                                 {hasOpenFile ? (
                                     <>
                                         <i className="codicon codicon-folder" style={{ fontSize: '14px', marginRight: '4px', opacity: 0.6 }} />

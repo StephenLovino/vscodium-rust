@@ -21,11 +21,11 @@ export class TerminalManager {
         this.idCounter = 1;
     }
 
-    async createTerminal(container: HTMLElement, shell?: string): Promise<string> {
-        const id = `term-${Date.now()}`;
+    async createTerminal(container: HTMLElement, shell?: string, theme?: any, providedId?: string): Promise<string> {
+        const id = providedId || `term-${Date.now()}`;
         
         const term = new Terminal({
-            theme: { 
+            theme: theme || { 
                 background: "#1e1e1e", 
                 foreground: "#cccccc",
                 cursor: "#cccccc",
@@ -41,13 +41,17 @@ export class TerminalManager {
         term.loadAddon(fitAddon);
         
         term.open(container);
-        fitAddon.fit();
+        
+        // Use a small delay to ensure container is fully rendered and has dimensions
+        setTimeout(() => {
+            try { fitAddon.fit(); } catch (e) {}
+        }, 50);
 
         const terminalData: TerminalData = { 
             id, 
             term, 
             fitAddon, 
-            shell: shell || (window.navigator.platform.includes('Win') ? 'powershell' : 'zsh') 
+            shell: shell || "" 
         };
         
         this.terminals.set(id, terminalData);
@@ -60,6 +64,10 @@ export class TerminalManager {
 
         try {
             await invoke("spawn_terminal", { id, shell: terminalData.shell });
+            // Fit again after spawn to ensure correct size
+            setTimeout(() => {
+                try { fitAddon.fit(); } catch (e) {}
+            }, 100);
         } catch (e) {
             term.write(`\r\n\x1b[31mError spawning terminal: ${e}\x1b[0m\r\n`);
         }
@@ -70,10 +78,15 @@ export class TerminalManager {
     async closeTerminal(id: string): Promise<void> {
         const t = this.terminals.get(id);
         if (t) {
+            await invoke("close_terminal", { id });
             t.term.dispose();
             this.terminals.delete(id);
             if (this.activeId === id) this.activeId = null;
         }
+    }
+
+    async getAvailableShells(): Promise<string[]> {
+        return await invoke<string[]>("get_available_shells");
     }
 
     handleData(termId: string, data: string): void {
@@ -84,14 +97,30 @@ export class TerminalManager {
     resize(id: string) {
         const t = this.terminals.get(id);
         if (t) {
-            try { t.fitAddon.fit(); } catch (e) {}
+            try { 
+                t.fitAddon.fit();
+                const { cols, rows } = t.term;
+                invoke("resize_terminal", { id, cols, rows });
+            } catch (e) {}
+        }
+    }
+
+    setTheme(id: string, theme: any) {
+        const t = this.terminals.get(id);
+        if (t) {
+            t.term.options.theme = theme;
         }
     }
 }
 
 export const terminalManager = new TerminalManager();
 
+let isInitialized = false;
+
 export async function initTerminal(): Promise<void> {
+    if (isInitialized) return;
+    isInitialized = true;
+
     listen("terminal-data", (event: any) => {
         const { term_id, data } = event.payload;
         terminalManager.handleData(term_id, data);
@@ -102,4 +131,11 @@ export async function initTerminal(): Promise<void> {
             terminalManager.resize(id);
         }
     });
+
+    // Expose a global way to spawn/manage terminals for the TitleBar
+    (window as any).spawnTerminal = () => {
+        // Find the BottomPanel's create function or dispatch event
+        // For simplicity in this shell, we'll dispatch a custom event
+        window.dispatchEvent(new CustomEvent('terminal:create'));
+    };
 }

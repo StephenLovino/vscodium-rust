@@ -62,6 +62,20 @@ export interface McpServer {
     config: any;
 }
 
+export interface TerminalInstance {
+    id: string;
+    shell: string;
+    parentGroupId: string;
+}
+
+export interface TerminalGroup {
+    id: string;
+    name: string;
+    instances: string[]; // ids of terminal instances
+    activeInstanceId: string;
+    splitWeights?: number[]; // Percentages or relative weights
+}
+
 interface AppState {
     // Layout State
     isSidebarOpen: boolean;
@@ -73,6 +87,10 @@ interface AppState {
     sidebarWidth: number;
     rightSidebarWidth: number;
     bottomPanelHeight: number;
+
+    // Terminal State
+    terminalGroups: TerminalGroup[];
+    activeTerminalGroupId: string | null;
 
     // Editor State
     activeTabId: string | null;
@@ -183,6 +201,16 @@ interface AppState {
     addAttachedContext: (item: AttachedContext) => void;
     removeAttachedContext: (index: number) => void;
     clearAttachedContext: () => void;
+
+    // Terminal Actions
+    addTerminalGroup: (shell?: string) => Promise<string>;
+    splitTerminal: (groupId: string, instanceId: string) => Promise<string>;
+    closeTerminalInstance: (groupId: string, instanceId: string) => Promise<void>;
+    setActiveTerminalGroup: (id: string) => void;
+    setActiveTerminalInstance: (groupId: string, instanceId: string) => void;
+    renameTerminalGroup: (groupId: string, name: string) => void;
+    closeTerminalGroup: (groupId: string) => Promise<void>;
+    updateTerminalSplitWeights: (groupId: string, weights: number[]) => void;
 }
 
 function detectLanguage(filename: string): string {
@@ -246,6 +274,10 @@ export const useStore = create<AppState>((set, get) => ({
     pullProgress: 0,
     attachedContext: [],
     pendingChanges: [],
+
+    // Terminal Initial State
+    terminalGroups: [],
+    activeTerminalGroupId: null,
 
     // Project Memory
     projectMemory: '',
@@ -805,6 +837,108 @@ export const useStore = create<AppState>((set, get) => ({
             };
         });
     },
+
+    // Terminal Actions Implementation
+    addTerminalGroup: async (shell) => {
+        const id = `group-${Date.now()}`;
+        const instanceId = `term-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+        const name = shell ? shell.split(/[\\/]/).pop() || 'shell' : 'terminal';
+        
+        const newGroup: TerminalGroup = {
+            id,
+            name: `${name}`,
+            instances: [instanceId],
+            activeInstanceId: instanceId
+        };
+
+        set((state) => ({
+            terminalGroups: [...state.terminalGroups, newGroup],
+            activeTerminalGroupId: id,
+            activePanelTab: 'TERMINAL',
+            isBottomPanelOpen: true
+        }));
+
+        return id;
+    },
+
+    splitTerminal: async (groupId, instanceId) => {
+        const newInstanceId = `term-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+        
+        set((state) => {
+            const groups = state.terminalGroups.map(g => {
+                if (g.id === groupId) {
+                    return {
+                        ...g,
+                        instances: [...g.instances, newInstanceId],
+                        activeInstanceId: newInstanceId
+                    };
+                }
+                return g;
+            });
+            return { terminalGroups: groups };
+        });
+
+        return newInstanceId;
+    },
+
+    closeTerminalInstance: async (groupId, instanceId) => {
+        set((state) => {
+            const groups = state.terminalGroups.map(g => {
+                if (g.id === groupId) {
+                    const newInstances = g.instances.filter(id => id !== instanceId);
+                    return {
+                        ...g,
+                        instances: newInstances,
+                        activeInstanceId: g.activeInstanceId === instanceId 
+                            ? (newInstances.length > 0 ? newInstances[newInstances.length - 1] : '') 
+                            : g.activeInstanceId
+                    };
+                }
+                return g;
+            }).filter(g => g.instances.length > 0);
+
+            let activeId = state.activeTerminalGroupId;
+            if (activeId === groupId && !groups.find(g => g.id === groupId)) {
+                activeId = groups.length > 0 ? groups[groups.length - 1].id : null;
+            }
+
+            return { terminalGroups: groups, activeTerminalGroupId: activeId };
+        });
+    },
+
+    setActiveTerminalGroup: (id) => set({ activeTerminalGroupId: id }),
+
+    setActiveTerminalInstance: (groupId, instanceId) => set((state) => ({
+        terminalGroups: state.terminalGroups.map(g => 
+            g.id === groupId ? { ...g, activeInstanceId: instanceId } : g
+        )
+    })),
+
+    renameTerminalGroup: (groupId, name) => set((state) => ({
+        terminalGroups: state.terminalGroups.map(g => 
+            g.id === groupId ? { ...g, name } : g
+        )
+    })),
+
+    closeTerminalGroup: async (groupId) => {
+        set((state) => {
+            const nextGroups = state.terminalGroups.filter(g => g.id !== groupId);
+            let nextActiveId = state.activeTerminalGroupId;
+            if (nextActiveId === groupId) {
+                nextActiveId = nextGroups.length > 0 ? nextGroups[0].id : null;
+            }
+            return {
+                terminalGroups: nextGroups,
+                activeTerminalGroupId: nextActiveId
+            };
+        });
+    },
+
+    updateTerminalSplitWeights: (groupId, weights) => set((state) => ({
+        terminalGroups: state.terminalGroups.map(g => 
+            g.id === groupId ? { ...g, splitWeights: weights } : g
+        )
+    })),
 }));
 
 function findNodeRecursive(nodes: FileEntry[], path: string): FileEntry | null {

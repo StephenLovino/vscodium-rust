@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../store';
 
 const McpManager: React.FC = () => {
-    const { mcpServers, registerMcpServer, listMcpServers } = useStore();
+    const { mcpServers, addMcpServer, listMcpServers } = useStore();
     const [name, setName] = useState('');
     const [command, setCommand] = useState('');
     const [args, setArgs] = useState('');
@@ -16,7 +16,7 @@ const McpManager: React.FC = () => {
         if (!name || !command) return;
         setIsAdding(true);
         const argsArray = args.split(',').map(a => a.trim()).filter(a => a !== '');
-        await registerMcpServer(name, command, argsArray);
+        await addMcpServer(name, { command, args: argsArray });
         setName('');
         setCommand('');
         setArgs('');
@@ -49,7 +49,7 @@ const McpManager: React.FC = () => {
                                 marginBottom: '8px'
                             }}>
                                 <i className="codicon codicon-server" style={{ color: '#007acc' }}></i>
-                                <span style={{ fontSize: '13px' }}>{server}</span>
+                                <span style={{ fontSize: '13px' }}>{server.name}</span>
                                 <span style={{ marginLeft: 'auto', fontSize: '11px', opacity: 0.5 }}>Connected</span>
                             </div>
                         ))

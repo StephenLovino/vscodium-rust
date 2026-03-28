@@ -1,13 +1,12 @@
-/* Pane Items (Open Editors, Tree Items) */
 .pane-item {
   display: flex;
   align-items: center;
   height: 22px;
-  padding: 0 12px;
+  padding: 0 16px; /* Native VS Code width */
   cursor: pointer;
   font-size: 13px;
   color: var(--vscode-sideBar-foreground);
-  gap: 6px;
+  gap: 8px; /* Slightly wider gap for icons */
   overflow: hidden;
   white-space: nowrap;
 }
@@ -93,4 +92,96 @@
 .tree-row:focus-within {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
+}
+
+/* Bottom Panel Styles */
+.bottom-panel {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--vscode-panel-background);
+  border-top: 1px solid var(--vscode-panel-border, #454545);
+  overflow: hidden;
+}
+
+.bottom-panel .panel-header {
+  display: flex;
+  align-items: center;
+  height: 35px;
+  padding: 0 8px 0 16px;
+  background-color: var(--vscode-panel-background);
+}
+
+.bottom-panel .panel-tabs {
+  display: flex;
+  height: 100%;
+  gap: 4px;
+}
+
+.bottom-panel .panel-tab {
+  padding: 0 4px;
+  margin-right: 12px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--vscode-panelTitle-inactiveForeground, #888888);
+  height: 100%;
+  position: relative;
+  transition: color 0.1s;
+  letter-spacing: 0.2px;
+}
+
+.bottom-panel .panel-tab:hover {
+  color: var(--vscode-panelTitle-activeForeground, #ffffff);
+}
+
+.bottom-panel .panel-tab.active {
+  color: var(--vscode-panelTitle-activeForeground, #ffffff);
+}
+
+.bottom-panel .panel-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: var(--vscode-panelTitle-activeBorder, #007acc);
+}
+
+.bottom-panel .panel-toolbar {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bottom-panel .panel-toolbar .toolbar-item {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--vscode-foreground);
+  opacity: 0.8;
+  transition: background-color 0.1s, opacity 0.1s;
+}
+
+.bottom-panel .panel-toolbar .toolbar-item:hover {
+  background-color: var(--vscode-toolbar-hoverBackground, rgba(255, 255, 255, 0.1));
+  opacity: 1;
+}
+
+.bottom-panel .panel-toolbar .toolbar-item .codicon {
+  font-size: 16px;
+}
+
+.bottom-panel .panel-content {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--vscode-panel-background);
 }

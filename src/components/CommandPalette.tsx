@@ -75,13 +75,6 @@ const CommandPalette: React.FC = () => {
                     <div 
                         key={cmd.id} 
                         className={`command-item ${idx === selectedIndex ? 'selected' : ''}`}
-                        style={{
-                            padding: '4px 10px',
-                            fontSize: '13px',
-                            cursor: 'pointer',
-                            backgroundColor: idx === selectedIndex ? 'var(--vscode-list-activeSelectionBackground)' : 'transparent',
-                            color: idx === selectedIndex ? 'var(--vscode-list-activeSelectionForeground)' : 'inherit'
-                        }}
                         onClick={() => {
                             setOpen(false);
                             cmd.run();

@@ -32,18 +32,32 @@ const StatusBar: React.FC = () => {
 
     return (
         <footer className="status-bar" style={{
-            backgroundColor: 'var(--vscode-statusBar-background)',
-            color: 'var(--vscode-statusBar-foreground)',
-            height: 'var(--status-bar-height, 22px)',
+            backgroundColor: '#007acc', // VS Code Blue
+            color: '#ffffff',
+            height: '22px',
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            padding: '0 8px',
             fontSize: '12px',
             fontFamily: 'var(--font-ui)',
-            userSelect: 'none'
+            userSelect: 'none',
+            zIndex: 1000
         }}>
             <div className="status-left" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
+                <div style={{ 
+                    background: '#16825d', 
+                    height: '100%', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    padding: '0 8px',
+                    marginRight: '8px'
+                }}>
+                    <i className="codicon codicon-remote" style={{ fontSize: '14px' }}></i>
+                </div>
+                <div className="status-item hoverable" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 6px' }}>
+                    <i className="codicon codicon-layout-sidebar-left" style={{ fontSize: '12px', marginRight: '4px' }}></i>
+                    vscodium-rust
+                </div>
                 <div className="status-item hoverable" onClick={() => setActiveSidebarView('scm-view')} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 6px' }}>
                     <i className="codicon codicon-source-control" style={{ fontSize: '12px', marginRight: '4px' }}></i>main*
                 </div>
@@ -51,12 +65,8 @@ const StatusBar: React.FC = () => {
                     <i className="codicon codicon-sync" style={{ fontSize: '12px' }}></i>
                 </div>
                 <div className="status-item hoverable" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 6px' }}>
-                    <i className="codicon codicon-error" style={{ fontSize: '12px', marginRight: '2px' }}></i>0
+                    <i className="codicon codicon-error" style={{ fontSize: '12px', marginRight: '2px' }}></i>6
                     <i className="codicon codicon-warning" style={{ fontSize: '12px', marginLeft: '6px', marginRight: '2px' }}></i>0
-                </div>
-                <div className="status-item hoverable" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 10px', color: '#ff813f' }}>
-                    <i className="codicon codicon-heart" style={{ fontSize: '12px', marginRight: '4px' }}></i>
-                    <span>Support</span>
                 </div>
             </div>
             <div className="status-right" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -66,9 +76,8 @@ const StatusBar: React.FC = () => {
                 <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>Ln 1, Col 1</div>
                 <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>Spaces: 4</div>
                 <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>UTF-8</div>
-                <div className="status-item hoverable" onClick={handleOptimize} style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px', color: '#89d185' }}>
-                    <i className="codicon codicon-dashboard" style={{ fontSize: '12px', marginRight: '6px' }} />
-                    <span>Optimize</span>
+                <div className="status-item hoverable" onClick={handleOptimize} style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>
+                    <i className="codicon codicon-dashboard" style={{ fontSize: '12px', marginRight: '4px' }} />Optimize
                 </div>
                 <div className="status-item hoverable" onClick={toggleTheme} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
                     <i className="codicon codicon-color-mode" style={{ marginRight: '4px' }}></i>

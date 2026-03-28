@@ -313,7 +313,7 @@ const Sidebar: React.FC = () => {
     };
 
     return (
-        <aside className="sidebar" id="sidebar" style={{ background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-sideBar-foreground)', display: 'flex', flexDirection: 'column', width: '100%', height: '100%', borderRight: '1px solid var(--vscode-panel-border)' }}>
+        <aside className="sidebar" id="sidebar">
             <div className="sidebar-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 12px', height: '35px', minHeight: '35px' }}>
                 <div style={{ fontSize: '11px', fontWeight: 600 }}>{titles[activeView] || activeView.toUpperCase()}</div>
             </div>

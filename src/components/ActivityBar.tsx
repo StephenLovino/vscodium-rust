@@ -118,7 +118,7 @@ const ActivityBar: React.FC = () => {
                         {installedThemes.map((theme, i) => (
                             <div key={i} className="theme-item" onClick={() => handleThemeSelect(theme)}>
                                 <span className="theme-label">{theme.label}</span>
-                                <span className="theme-ext">{theme.extension}</span>
+                                <span className="theme-ext">{theme.extensionName}</span>
                             </div>
                         ))}
                         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--vscode-panel-border)', opacity: 0.5, fontSize: '11px' }}>

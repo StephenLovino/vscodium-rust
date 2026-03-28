@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize, MasterPty};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize, MasterPty, Child};
 use tauri::State;
 use ropey::Rope;
 use tauri::Manager;
@@ -91,6 +91,7 @@ struct EditorState {
     settings: Mutex<Settings>,
     terminal_masters: Mutex<HashMap<String, Box<dyn MasterPty + Send>>>,
     terminal_writers: Mutex<HashMap<String, Box<dyn Write + Send>>>,
+    terminal_processes: Mutex<HashMap<String, Box<dyn Child + Send>>>,
     lsp_client: Arc<Mutex<LspClient>>,
     context_keys: Arc<ContextKeyRegistry>,
     ext_host: Arc<Mutex<ExtensionHostManager>>,
@@ -125,7 +126,8 @@ impl EditorState {
             "".to_string(), // Initial empty API key
             root.clone(),
             auth_state.clone(),
-            browser_state.clone()
+            browser_state.clone(),
+            config_dir.clone()
         ));
         sentient.set_app_handle(app.clone());
 
@@ -135,6 +137,7 @@ impl EditorState {
             settings: Mutex::new(Settings { theme: "vs-dark".to_string(), font_size: 14 }),
             terminal_masters: Mutex::new(HashMap::new()),
             terminal_writers: Mutex::new(HashMap::new()),
+            terminal_processes: Mutex::new(HashMap::new()),
             lsp_client: Arc::new(Mutex::new(LspClient::new())),
             context_keys: Arc::new(ContextKeyRegistry::new()),
             ext_host: Arc::new(Mutex::new(ExtensionHostManager::new(
@@ -882,14 +885,41 @@ struct SearchResult {
 }
 
 #[tauri::command]
-fn spawn_terminal(state: State<'_, EditorState>, app: tauri::AppHandle, id: String, _shell: Option<String>) -> Result<(), String> {
+fn spawn_terminal(state: State<'_, EditorState>, app: tauri::AppHandle, id: String, shell: Option<String>) -> Result<(), String> {
     let pty_system = native_pty_system();
     let pair = pty_system.openpty(PtySize { rows: 24, cols: 80, pixel_width: 0, pixel_height: 0 })
         .map_err(|e| e.to_string())?;
     
-    let shell_exe = if cfg!(target_os = "windows") { "powershell.exe".to_string() } else { "/bin/zsh".to_string() };
-    let cmd = CommandBuilder::new(shell_exe);
-    pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+    // Determine the shell
+    let shell_exe = if let Some(s) = shell {
+        if s.is_empty() {
+            if cfg!(target_os = "windows") {
+                std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string())
+            } else {
+                std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+            }
+        } else {
+            s
+        }
+    } else {
+        if cfg!(target_os = "windows") {
+            std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string())
+        } else {
+            std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+        }
+    };
+
+    let mut cmd = CommandBuilder::new(shell_exe);
+
+    // Set CWD to active project root if available
+    {
+        let root = state.active_root.lock().unwrap();
+        if let Some(ref r) = *root {
+            cmd.cwd(r.clone());
+        }
+    }
+
+    let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
@@ -916,8 +946,36 @@ fn spawn_terminal(state: State<'_, EditorState>, app: tauri::AppHandle, id: Stri
     });
 
     state.terminal_masters.lock().unwrap().insert(id.clone(), pair.master);
-    state.terminal_writers.lock().unwrap().insert(id, writer);
+    state.terminal_writers.lock().unwrap().insert(id.clone(), writer);
+    state.terminal_processes.lock().unwrap().insert(id, child);
     Ok(())
+}
+
+#[tauri::command]
+fn close_terminal(state: State<'_, EditorState>, id: String) -> Result<(), String> {
+    // Drop the master, writer, and kill the process
+    state.terminal_writers.lock().unwrap().remove(&id);
+    state.terminal_masters.lock().unwrap().remove(&id);
+    if let Some(mut child) = state.terminal_processes.lock().unwrap().remove(&id) {
+        let _ = child.kill();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn get_available_shells() -> Vec<String> {
+    let mut shells = Vec::new();
+    if cfg!(target_os = "windows") {
+        shells.push("powershell.exe".to_string());
+        shells.push("cmd.exe".to_string());
+    } else {
+        for path in &["/bin/zsh", "/bin/bash", "/usr/bin/zsh", "/usr/bin/bash", "/bin/sh"] {
+            if std::path::Path::new(path).exists() {
+                shells.push(path.to_string());
+            }
+        }
+    }
+    shells
 }
 
 #[tauri::command]
@@ -969,16 +1027,7 @@ async fn list_provider_models(state: State<'_, EditorState>, provider: String) -
      state._sentient.list_models(&provider).await.map_err(|e| e.to_string())
 }
 
-#[tauri::command]
-async fn register_mcp_server(state: State<'_, EditorState>, name: String, command: String, args: Vec<String>) -> Result<(), String> {
-    let config = McpServerConfig { name, command, args };
-    state._sentient.register_mcp_server(config).await.map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn list_mcp_servers(state: State<'_, EditorState>) -> Result<Vec<String>, String> {
-    state._sentient.list_mcp_servers().await.map_err(|e| e.to_string())
-}
+// Duplicates removed
 
 #[tauri::command]
 fn get_installed_themes(state: State<'_, EditorState>) -> Result<Vec<Value>, String> {
@@ -1286,7 +1335,7 @@ pub fn run() {
             search_project, get_git_branch, git_status, git_stage,
             git_unstage, git_commit, get_api_keys, save_api_keys,
             list_provider_models, ai_chat, spawn_terminal, write_to_terminal,
-            resize_terminal, search_extensions, install_extension,
+            resize_terminal, close_terminal, get_available_shells, search_extensions, install_extension,
             get_popular_extensions, get_installed_extensions, 
             get_installed_themes, load_extension_theme,
             debug_start, debug_send, debug_stop, check_activation_event,

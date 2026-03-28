@@ -64,13 +64,20 @@ const App: React.FC = () => {
         initDebugUI();
         initTerminal();
         initAgent();
-
-        // Disable Auto-Load of previous directory to prevent crashing on large folders during startup
-        const { refreshAvailableModels, setActiveRoot } = useStore.getState();
-        refreshAvailableModels();
         
-        // Force clean state on startup instead of restoring activeRoot
-        setActiveRoot(null);
+        // --- Platform Detection for Native Feel ---
+        const ua = navigator.userAgent.toLowerCase();
+        if (ua.includes('mac')) document.body.classList.add('os-macos');
+        else if (ua.includes('win')) document.body.classList.add('os-windows');
+        else if (ua.includes('linux')) document.body.classList.add('os-linux');
+        
+        // Add desktop/web class
+        if ((window as any).__TAURI__) document.body.classList.add('is-desktop');
+        else document.body.classList.add('is-web');
+        // ----------------------------------------
+
+        const { refreshAvailableModels } = useStore.getState();
+        refreshAvailableModels();
     }, []);
 
     return (

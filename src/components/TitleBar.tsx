@@ -80,8 +80,8 @@ const TitleBar: React.FC = () => {
 
             <div className="command-center" onClick={() => (window as any).showCommandPalette?.()}>
                 <div className="command-box">
-                    <i className="codicon codicon-search" style={{ fontSize: '12px', marginRight: '8px', opacity: 0.6 }}></i>
-                    <div className="text" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <i className="codicon codicon-search"></i>
+                    <div className="text">
                         { (window as any).activeRootName || 'vscodium-rust' } — { (window as any).useStore?.getState().activeTabId ? ( (window as any).useStore?.getState().tabs.find((t:any) => t.id === (window as any).useStore?.getState().activeTabId)?.filename || 'Welcome' ) : 'Welcome' }
                     </div>
                 </div>
@@ -89,25 +89,8 @@ const TitleBar: React.FC = () => {
 
             <div className="title-bar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '12px' }}>
                 {/* AI Model Badge */}
-                <div 
-                    className="ai-model-badge"
-                    style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '3px 8px',
-                        background: 'rgba(59, 130, 246, 0.1)',
-                        border: '1px solid rgba(59, 130, 246, 0.15)',
-                        borderRadius: '100px', // Pill shape
-                        fontSize: '10px',
-                        fontWeight: 700,
-                        color: cyberMode ? '#a78bfa' : '#60a5fa',
-                        marginRight: '8px',
-                        letterSpacing: '0.02em',
-                        backdropFilter: 'blur(5px)'
-                    }}
-                >
-                    <i className="codicon codicon-sparkle" style={{ fontSize: '10px' }}></i>
+                <div className={`ai-model-badge ${cyberMode ? 'cyber' : ''}`}>
+                    <i className="codicon codicon-sparkle"></i>
                     <span>{(agentModel.split('|')[1] || agentModel).split(':')[0].toUpperCase()}</span>
                     {agentModel.toLowerCase().includes('ollama') && (
                         <div 

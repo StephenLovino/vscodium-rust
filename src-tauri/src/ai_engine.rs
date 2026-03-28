@@ -128,8 +128,8 @@ pub struct Sentient {
 }
 
 impl Sentient {
-    pub fn new(api_key: String, root_path: PathBuf, auth_state: Arc<AuthState>, browser_state: Arc<crate::browser::BrowserState>) -> Self {
-        let mcp_registry = Arc::new(McpRegistry::new());
+    pub fn new(api_key: String, root_path: PathBuf, auth_state: Arc<AuthState>, browser_state: Arc<crate::browser::BrowserState>, config_dir: PathBuf) -> Self {
+        let mcp_registry = Arc::new(McpRegistry::new(config_dir.join("mcp_servers.json")));
         let ai_tools = Arc::new(AiTools::new(root_path.clone(), browser_state.clone()));
         let task_planner = Arc::new(TaskPlanner::new());
         let memory_store = Arc::new(MemoryStore::new());
@@ -175,11 +175,11 @@ impl Sentient {
     }
 
     /// Main autonomous reasoning loop with iterative tool invocation and task planning.
-    pub async fn register_mcp_server(&self, config: McpServerConfig) -> Result<()> {
-        self.mcp_registry.add_server(config).await
+    pub async fn register_mcp_server(&self, name: String, config: McpServerConfig) -> Result<()> {
+        self.mcp_registry.add_server(name, config).await
     }
 
-    pub async fn list_mcp_servers(&self) -> Result<Vec<String>> {
+    pub async fn list_mcp_servers(&self) -> Result<Vec<Value>> {
         Ok(self.mcp_registry.list_servers().await)
     }
 

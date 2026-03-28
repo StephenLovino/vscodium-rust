@@ -25,6 +25,8 @@
     "@vitejs/plugin-react": "^5.1.4",
     "@vscode/codicons": "^0.0.44",
     "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-search": "^0.16.0",
+    "@xterm/addon-unicode11": "^0.9.0",
     "@xterm/xterm": "^6.0.0",
     "diff": "^8.0.4",
     "marked": "^17.0.5",

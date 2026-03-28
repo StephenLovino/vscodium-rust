@@ -1,3 +1,12 @@
+.sidebar {
+  background-color: var(--vscode-sideBar-background);
+  color: var(--vscode-sideBar-foreground);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--vscode-sideBar-border, rgba(0, 0, 0, 0.2));
+  width: 100%;
+}
+
 :root {
   /* Authentic VS Code Dark+ Palette */
   --vscode-editor-background: #1e1e1e;
@@ -37,7 +46,25 @@
   --pane-header-height: 22px;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", Monaco, Menlo, Consolas, monospace;
+  --font-mono: "SF Mono", Monaco, Menlo, Consolas, "JetBrains Mono", monospace;
+  
+  /* Native-like Shadows */
+  --shadow-macos: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-menu: 0 5px 15px rgba(0, 0, 0, 0.4);
+  --shadow-tooltip: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+/* Platform-Specific Typography */
+body.os-macos {
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+body.os-windows {
+  --font-ui: "Segoe UI", "Tahoma", "Microsoft YaHei", sans-serif;
+}
+
+body.os-linux {
+  --font-ui: "Inter", "Ubuntu", "Cantarell", "DejaVu Sans", sans-serif;
 }
 
 * {
@@ -57,6 +84,10 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.01em; /* Precise native-style spacing */
 }
 
 #root {
@@ -65,10 +96,10 @@ body {
   flex-direction: column;
 }
 
-/* Custom Scrollbars */
+/* Native-style Overlay Scrollbars */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 ::-webkit-scrollbar-track {
@@ -76,11 +107,17 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(121, 121, 121, 0.4);
+  background: rgba(121, 121, 121, 0.2); /* Fainter initial state */
+  border: 3px solid transparent; /* Creates the padding effect */
+  background-clip: padding-box;
+  border-radius: 9999px;
+  transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(100, 100, 100, 0.7);
+  background: rgba(100, 100, 100, 0.5);
+  border: 3px solid transparent;
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-corner {
@@ -211,8 +248,18 @@ body.resizing * {
 }
 
 .window-controls-spacer {
-  width: 12px;
+  display: none;
   flex-shrink: 0;
+}
+
+body.os-macos .window-controls-spacer {
+  display: block;
+  width: 80px; /* Standard space for traffic lights */
+}
+
+body.os-windows .title-bar-right,
+body.os-linux .title-bar-right {
+  padding-right: 140px; /* Space for Windows/Linux title buttons */
 }
 
 .app-identity {
@@ -265,9 +312,15 @@ body.resizing * {
   border-radius: 6px;
   padding: 4px 0;
   min-width: 180px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-macos); /* Refined macOS Shadow */
   z-index: 1000;
   margin-top: 4px;
+  animation: menuFadeIn 0.1s ease-out;
+}
+
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .menu-dropdown-item {
@@ -301,25 +354,51 @@ body.resizing * {
 .command-box {
   background-color: var(--vscode-input-background);
   border: 1px solid var(--vscode-panel-border);
-  border-radius: 4px;
-  height: 22px;
+  border-radius: 6px; /* Native rounded corners */
+  height: 24px;
   width: 100%;
   max-width: 400px;
   display: flex;
   align-items: center;
   padding: 0 8px;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background-color 0.2s;
 }
 
 .command-box:hover {
+  background-color: rgba(255, 255, 255, 0.05);
   border-color: var(--vscode-focusBorder);
 }
 
 .command-box .text {
-  font-size: 12px;
-  color: var(--vscode-titleBar-activeForeground);
-  opacity: 0.6;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-model-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #60a5fa;
+  margin-right: 8px;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(5px);
+}
+
+.ai-model-badge.cyber {
+  color: #a78bfa;
+}
+
+.ai-model-badge .codicon-sparkle {
+  font-size: 10px;
 }
 
 .title-bar-right {
@@ -385,6 +464,7 @@ body.resizing * {
 .activity-bar {
   width: var(--activity-bar-width);
   background: var(--vscode-activityBar-background);
+  border-right: 1px solid var(--vscode-activityBar-border, transparent);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -921,6 +1001,7 @@ body.resizing * {
   font-size: 13px;
   color: var(--vscode-sideBar-foreground);
   opacity: 0.8;
+  border-bottom: 1px solid var(--vscode-panel-border, rgba(255, 255, 255, 0.05));
 }
 
 .tabs-row {
@@ -1401,6 +1482,7 @@ body {
 .right-sidebar {
   overflow-x: hidden !important;
   max-width: 100vw;
+  border-left: 1px solid var(--vscode-sideBar-border, rgba(255, 255, 255, 0.1));
 }
 
 .agent-input-wrapper {
@@ -1755,6 +1837,56 @@ body {
     transform: translateX(4px);
 }
 
+/* Command Palette */
+.command-palette {
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  max-width: 90%;
+  background: var(--vscode-sideBar-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow-macos); /* Higher depth for command palette */
+  z-index: 10000;
+  overflow: hidden;
+  animation: menuFadeIn 0.1s ease-out;
+}
+
+.command-input-container {
+  padding: 8px;
+  background: var(--vscode-sideBar-background);
+}
+
+.command-input-container input {
+  background: var(--vscode-input-background);
+  color: var(--vscode-editor-foreground);
+  border: 1px solid var(--vscode-focusBorder);
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  width: 100%;
+  outline: none;
+}
+
+.command-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.command-item {
+  padding: 4px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--vscode-sideBar-foreground);
+}
+
+.command-item.selected {
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+}
+
 .add-mcp-form input {
     background: var(--vscode-input-background);
     border: 1px solid var(--vscode-panel-border);
@@ -2068,4 +2200,123 @@ body {
 
 .markdown-content think {
     display: none;
+}
+/* Terminal View Styles */
+.terminal-view-container {
+  overflow: hidden;
+}
+
+.terminal-sidebar {
+  border-left: 1px solid var(--vscode-panel-border);
+  box-shadow: -2px 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.terminal-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.terminal-instance-wrapper {
+  transition: border-left 0.2s ease;
+}
+
+.terminal-instance-wrapper.active {
+  box-shadow: inset 0 0 10px rgba(0, 122, 204, 0.1);
+}
+
+.terminal-instance-wrapper .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+}
+
+.terminal-sidebar .codicon-close {
+  visibility: hidden;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+.terminal-sidebar div:hover .codicon-close {
+  visibility: visible;
+}
+
+.terminal-sidebar .codicon-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.terminal-sidebar div:hover {
+  background: rgba(255, 255, 255, 0.03) !important;
+}
+
+/* Panel Header Enhancements */
+.panel-tab.active {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 4px;
+}
+
+/* Antigravity Premium UI Enhancements */
+
+@keyframes agent-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(0, 122, 204, 0.4); transform: scale(1); }
+  50% { box-shadow: 0 0 15px 5px rgba(0, 122, 204, 0.2); transform: scale(1.05); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 122, 204, 0.4); transform: scale(1); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.glass-morphism {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.agent-message-container {
+  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.task-summary-card {
+  animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.hoverable-scale {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s;
+}
+
+.hoverable-scale:hover {
+  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.thinking-spinner {
+  filter: drop-shadow(0 0 5px rgba(59, 130, 246, 0.5));
+}
+
+/* Scrollbar Refinement for Agent View */
+.right-sidebar-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.right-sidebar-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+.right-sidebar-content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
