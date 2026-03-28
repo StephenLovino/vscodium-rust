@@ -112,39 +112,39 @@ impl ApiRadarHunter {
     }
 
     pub fn extract_keys(&self, content: &str) -> Vec<(String, String)> {
-        // Triple-check: if no key indicator is present, skip expensive regex (unless we want to be super thorough)
-        // However, the user's specific requirement is (Extension AND Keyname AND (Pattern AND Tag))
-        if !self.contains_key_indicator(content) {
-            return Vec::new();
-        }
+        // Evaluate all regexes directly without premature keyword optimization
 
-        let patterns = vec![
-            ("openai_key", r"sk-[a-zA-Z0-9]{48}", vec!["openai", "gpt"]),
-            ("anthropic_api_key", r"sk-ant-api03-[a-zA-Z0-9-]{95}", vec!["anthropic", "claude"]),
-            ("google_api_key", r"AIza[0-9A-Za-z\-_]{35}", vec!["google", "gemini"]),
-            ("mistral_api_key", r"[a-zA-Z0-9]{32}", vec!["mistral", "pixtral"]),
-            ("perplexity_key", r"pplx-[a-zA-Z0-9]{44}", vec!["perplexity"]),
-            ("github_token", r"gh[pousr]_[a-zA-Z0-9]{36,}", vec!["github", "oauth"]),
-            ("slack_token", r"xox[abp]-[a-zA-Z0-9-]{10,}", vec!["slack"]),
+        let patterns: Vec<(&str, &str, Vec<&str>, bool)> = vec![
+            // (type, regex, context_tags, requires_tag_match)
+            // Keys with unique prefixes don't need tag matching — the prefix IS the identifier
+            ("openai_key", r"sk-[a-zA-Z0-9]{20,}", vec!["openai", "gpt", "api"], false),
+            ("anthropic_api_key", r"sk-ant-api03-[a-zA-Z0-9\-_]{80,}", vec!["anthropic", "claude"], false),
+            ("google_api_key", r"AIza[0-9A-Za-z\-_]{35}", vec!["google", "gemini", "firebase", "api"], false),
+            ("openrouter_key", r"sk-or-v1-[a-fA-F0-9]{64}", vec!["openrouter", "router"], false),
+            ("groq_key", r"gsk_[a-zA-Z0-9]{48,}", vec!["groq"], false),
+            ("perplexity_key", r"pplx-[a-zA-Z0-9]{44,}", vec!["perplexity"], false),
+            ("github_token", r"gh[pousr]_[a-zA-Z0-9]{36,}", vec!["github", "oauth"], false),
+            ("xai_key", r"xai-[a-zA-Z0-9]{48,}", vec!["xai", "grok"], false),
+            // Mistral keys don't have a unique prefix — require tag context
+            ("mistral_api_key", r"[a-zA-Z0-9]{32}", vec!["mistral", "pixtral", "codestral"], true),
         ];
 
         let mut results = Vec::new();
         let lower_content = content.to_lowercase();
 
-        for (key_type, pattern, tags) in patterns {
+        for (key_type, pattern, tags, requires_tag) in patterns {
+            // Skip tag-required patterns if no relevant tags found in content
+            if requires_tag {
+                let has_tag = tags.iter().any(|t| lower_content.contains(&t.to_lowercase()));
+                if !has_tag { continue; }
+            }
+
             if let Ok(re) = Regex::new(pattern) {
                 for cap in re.captures_iter(content) {
-                    let key = cap[0].to_string();
-                    // Check if any of the platform tags are present in the content
-                    let mut tag_match = false;
-                    for tag in &tags {
-                        if lower_content.contains(&tag.to_lowercase()) {
-                            tag_match = true;
-                            break;
-                        }
-                    }
-                    if tag_match {
-                        results.push((key, key_type.to_string()));
+                    let key_value = cap[0].to_string();
+                    // Deduplicate
+                    if !results.iter().any(|(_, v): &(String, String)| v == &key_value) {
+                        results.push((key_type.to_string(), key_value));
                     }
                 }
             }
@@ -154,12 +154,13 @@ impl ApiRadarHunter {
 
     pub async fn validate_key(&self, key_type: &str, key: &str) -> (bool, String) {
         match key_type {
-            "openai_key" | "openrouter_key" | "xai_key" | "groq_key" | "cerebras_key" => {
+            "openai_key" | "openrouter_key" | "xai_key" | "groq_key" | "cerebras_key" | "mistral_api_key" => {
                 let url = match key_type {
                     "openrouter_key" => "https://openrouter.ai/api/v1/models",
                     "xai_key" => "https://api.x.ai/v1/models",
                     "groq_key" => "https://api.groq.com/openai/v1/models",
                     "cerebras_key" => "https://api.cerebras.ai/v1/models",
+                    "mistral_api_key" => "https://api.mistral.ai/v1/models",
                     _ => "https://api.openai.com/v1/models",
                 };
                 let resp = self.client.get(url)
@@ -183,11 +184,11 @@ impl ApiRadarHunter {
                 }
             },
             "gemini_api_key" | "google_api_key" => {
-                let url = format!("https://generativelanguage.googleapis.com/v1beta/models?key={}", key);
+                let url = format!("https://generativelanguage.googleapis.com/v1/models?key={}", key);
                 let resp = self.client.get(&url).send().await;
                 match resp {
-                    Ok(r) if r.status().is_success() => (true, "Key is live".to_string()),
-                    Ok(r) => (false, format!("Failed: {}", r.status())),
+                    Ok(r) if r.status().is_success() => (true, "Key is live (v1 success)".to_string()),
+                    Ok(r) => (false, format!("Failed: {} at v1", r.status())),
                     Err(e) => (false, format!("Error: {}", e)),
                 }
             },

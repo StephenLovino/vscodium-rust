@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use std::sync::Arc;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
 
@@ -13,11 +14,12 @@ pub struct ToolDefinition {
 
 pub struct AiTools {
     root_path: PathBuf,
+    browser_state: Arc<crate::browser::BrowserState>,
 }
 
 impl AiTools {
-    pub fn new(root_path: PathBuf) -> Self {
-        Self { root_path }
+    pub fn new(root_path: PathBuf, browser_state: Arc<crate::browser::BrowserState>) -> Self {
+        Self { root_path, browser_state }
     }
 
     pub fn list_tools(&self) -> Vec<ToolDefinition> {
@@ -177,6 +179,77 @@ impl AiTools {
                     "required": ["binary_path"]
                 }),
             },
+            ToolDefinition {
+                name: "terminal_send_data".into(),
+                description: "Send raw data/commands to the active terminal session".into(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "data": {"type": "string", "description": "The string/command to send (include \\n for enter)"},
+                        "term_id": {"type": "string", "description": "The ID of the terminal to send to (optional, defaults to active)"}
+                    },
+                    "required": ["data"]
+                }),
+            },
+            ToolDefinition {
+                name: "browser_open".into(),
+                description: "Open a new headless browser instance".into(),
+                input_schema: json!({"type": "object", "properties": {}}),
+            },
+            ToolDefinition {
+                name: "browser_navigate".into(),
+                description: "Navigate the browser to a URL".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "The URL to navigate to"}
+                    },
+                    "required": ["url"]
+                }),
+            },
+            ToolDefinition {
+                name: "browser_screenshot".into(),
+                description: "Capture a screenshot of the current page and return as base64".into(),
+                input_schema: json!({"type": "object", "properties": {}}),
+            },
+            ToolDefinition {
+                name: "browser_click".into(),
+                description: "Click an element on the page using a CSS selector".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "selector": {"type": "string", "description": "The CSS selector to click"}
+                    },
+                    "required": ["selector"]
+                }),
+            },
+            ToolDefinition {
+                name: "browser_type".into(),
+                description: "Type text into an element on the page using a CSS selector".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "selector": {"type": "string", "description": "The CSS selector to type into"},
+                        "text": {"type": "string", "description": "The text to type"}
+                    },
+                    "required": ["selector", "text"]
+                }),
+            },
+            ToolDefinition {
+                name: "browser_read_dom".into(),
+                description: "Read the full HTML content of the current page".into(),
+                input_schema: json!({"type": "object", "properties": {}}),
+            },
+            ToolDefinition {
+                name: "browser_close".into(),
+                description: "Close the headless browser instance".into(),
+                input_schema: json!({"type": "object", "properties": {}}),
+            },
+            ToolDefinition {
+                name: "find_api_keys".into(),
+                description: "Search the codebase for leaked API keys using common dorking patterns (OpenAI, GitHub, Google)".into(),
+                input_schema: json!({"type": "object", "properties": {}}),
+            },
         ]
     }
 
@@ -188,6 +261,14 @@ impl AiTools {
             "list_files" => self.list_files(arguments),
             "run_command" => self.run_command(arguments),
             "search_files" => self.search_files(arguments),
+            "browser_open" => self.browser_open(arguments),
+            "browser_navigate" => self.browser_navigate(arguments),
+            "browser_screenshot" => self.browser_screenshot(arguments),
+            "browser_click" => self.browser_click(arguments),
+            "browser_type" => self.browser_type(arguments),
+            "browser_read_dom" => self.browser_read_dom(arguments),
+            "browser_close" => self.browser_close(arguments),
+            "find_api_keys" => self.find_api_keys(arguments),
             "code_generation" => Ok(serde_json::json!({"result": "Code generated based on specification. (Mock implementation)"})),
             "generate_0day_exploit" => Ok(serde_json::json!({"status": "Exploit generated and verified in sandbox environment. (Mock implementation)"})),
             "reverse_engineer_firmware" => Ok(serde_json::json!({"analysis": "Firmware unpacked. No critical vulnerabilities found in first pass. (Mock implementation)"})),
@@ -334,6 +415,144 @@ impl AiTools {
             }
             if results.len() > 100 { break; }
         }
+        Ok(Value::Array(results))
+    }
+
+    fn browser_open(&self, _args: Value) -> Result<Value> {
+        use headless_chrome::{Browser, LaunchOptions};
+        let mut browser_lock = self.browser_state.browser.lock().unwrap();
+        if browser_lock.is_some() {
+            return Ok(serde_json::json!({"status": "already_open"}));
+        }
+
+        let options = LaunchOptions::default_builder()
+            .headless(true)
+            .build()
+            .map_err(|e| anyhow!(e.to_string()))?;
+
+        let browser = Browser::new(options).map_err(|e| anyhow!(e.to_string()))?;
+        *browser_lock = Some(browser);
+
+        Ok(serde_json::json!({"status": "success", "message": "Browser launched"}))
+    }
+
+    fn browser_navigate(&self, args: Value) -> Result<Value> {
+        let url = args.get("url").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing url"))?;
+        let browser_lock = self.browser_state.browser.lock().unwrap();
+        let browser = browser_lock.as_ref().ok_or_else(|| anyhow!("Browser not launched"))?;
+
+        let tab = browser.new_tab().map_err(|e| anyhow!(e.to_string()))?;
+        tab.navigate_to(url).map_err(|e| anyhow!(e.to_string()))?;
+        tab.wait_until_navigated().map_err(|e| anyhow!(e.to_string()))?;
+
+        Ok(serde_json::json!({"status": "success", "message": format!("Navigated to {}", url)}))
+    }
+
+    fn browser_screenshot(&self, _args: Value) -> Result<Value> {
+        use base64::{Engine as _, engine::general_purpose};
+        let browser_lock = self.browser_state.browser.lock().unwrap();
+        let browser = browser_lock.as_ref().ok_or_else(|| anyhow!("Browser not launched"))?;
+
+        let tab = browser.get_tabs().lock().unwrap().first().ok_or_else(|| anyhow!("No tabs open"))?.clone();
+        let jpeg_data = tab.capture_screenshot(
+            headless_chrome::protocol::cdp::Page::CaptureScreenshotFormatOption::Jpeg,
+            None, None, true
+        ).map_err(|e| anyhow!(e.to_string()))?;
+
+        Ok(serde_json::json!({"status": "success", "screenshot": general_purpose::STANDARD.encode(jpeg_data)}))
+    }
+
+    fn browser_click(&self, args: Value) -> Result<Value> {
+        let selector = args.get("selector").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing selector"))?;
+        let browser_lock = self.browser_state.browser.lock().unwrap();
+        let browser = browser_lock.as_ref().ok_or_else(|| anyhow!("Browser not launched"))?;
+
+        let tab = browser.get_tabs().lock().unwrap().first().ok_or_else(|| anyhow!("No tabs open"))?.clone();
+        let element = tab.wait_for_element(selector).map_err(|e| anyhow!(e.to_string()))?;
+        element.click().map_err(|e| anyhow!(e.to_string()))?;
+
+        Ok(serde_json::json!({"status": "success", "message": format!("Clicked {}", selector)}))
+    }
+
+    fn browser_type(&self, args: Value) -> Result<Value> {
+        let selector = args.get("selector").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing selector"))?;
+        let text = args.get("text").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing text"))?;
+        let browser_lock = self.browser_state.browser.lock().unwrap();
+        let browser = browser_lock.as_ref().ok_or_else(|| anyhow!("Browser not launched"))?;
+
+        let tab = browser.get_tabs().lock().unwrap().first().ok_or_else(|| anyhow!("No tabs open"))?.clone();
+        let element = tab.wait_for_element(selector).map_err(|e| anyhow!(e.to_string()))?;
+        element.type_into(text).map_err(|e| anyhow!(e.to_string()))?;
+
+        Ok(serde_json::json!({"status": "success", "message": format!("Typed into {}", selector)}))
+    }
+
+    fn browser_read_dom(&self, _args: Value) -> Result<Value> {
+        let browser_lock = self.browser_state.browser.lock().unwrap();
+        let browser = browser_lock.as_ref().ok_or_else(|| anyhow!("Browser not launched"))?;
+
+        let tab = browser.get_tabs().lock().unwrap().first().ok_or_else(|| anyhow!("No tabs open"))?.clone();
+        let content = tab.get_content().map_err(|e| anyhow!(e.to_string()))?;
+
+        Ok(serde_json::json!({"status": "success", "dom": content}))
+    }
+
+    fn browser_close(&self, _args: Value) -> Result<Value> {
+        let mut browser_lock = self.browser_state.browser.lock().unwrap();
+        *browser_lock = None;
+        Ok(serde_json::json!({"status": "success", "message": "Browser closed"}))
+    }
+
+    fn find_api_keys(&self, _args: Value) -> Result<Value> {
+        let mut results = Vec::new();
+        let extensions = vec![
+            "xml", "json", "properties", "sql", "txt", "log", "tmp", "backup", "bak", "enc",
+            "yml", "yaml", "toml", "ini", "config", "conf", "cfg", "env", "envrc", "prod",
+            "secret", "private", "key"
+        ];
+        
+        let openai_regex = regex::Regex::new(r"sk-[a-zA-Z0-9]{48}")?;
+        let github_regex = regex::Regex::new(r"gh[pousr]_[a-zA-Z0-9]+")?;
+        let google_regex = regex::Regex::new(r"AIza[0-9A-Za-z-_]{35}")?;
+        
+        use walkdir::WalkDir;
+        for entry in WalkDir::new(&self.root_path).into_iter().filter_map(|e| e.ok()) {
+            if entry.file_type().is_file() {
+                let ext = entry.path().extension().and_then(|s| s.to_str()).unwrap_or("");
+                if extensions.contains(&ext) || ext.is_empty() {
+                    let content = fs::read_to_string(entry.path());
+                    if let Ok(content) = content {
+                         for (i, line) in content.lines().enumerate() {
+                             let mut found = false;
+                             let mut provider = "";
+                             
+                             if openai_regex.is_match(line) && (line.to_lowercase().contains("openai") || line.to_lowercase().contains("gpt")) {
+                                 found = true;
+                                 provider = "OpenAI";
+                             } else if github_regex.is_match(line) && (line.to_lowercase().contains("github") || line.to_lowercase().contains("oauth")) {
+                                 found = true;
+                                 provider = "GitHub";
+                             } else if google_regex.is_match(line) && line.contains("Google") && line.contains("AIza") {
+                                 found = true;
+                                 provider = "Google";
+                             }
+                             
+                             if found {
+                                 results.push(serde_json::json!({
+                                     "provider": provider,
+                                     "file": entry.path().strip_prefix(&self.root_path)?.to_string_lossy().to_string(),
+                                     "line": i + 1,
+                                     "context": line.trim()
+                                 }));
+                             }
+                             if results.len() > 100 { break; }
+                         }
+                    }
+                }
+            }
+            if results.len() > 100 { break; }
+        }
+        
         Ok(Value::Array(results))
     }
 }

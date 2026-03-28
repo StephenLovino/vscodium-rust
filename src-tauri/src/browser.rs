@@ -65,6 +65,44 @@ pub async fn browser_screenshot(state: tauri::State<'_, BrowserState>) -> Result
 
 #[tauri::command]
 #[allow(dead_code)]
+pub async fn browser_click(state: tauri::State<'_, BrowserState>, selector: String) -> Result<String, String> {
+    let browser_lock = state.browser.lock().unwrap();
+    let browser = browser_lock.as_ref().ok_or("Browser not launched")?;
+
+    let tab = browser.get_tabs().lock().unwrap().first().ok_or("No tabs open")?.clone();
+    let element = tab.wait_for_element(&selector).map_err(|e| e.to_string())?;
+    element.click().map_err(|e| e.to_string())?;
+
+    Ok(format!("Clicked element: {}", selector))
+}
+
+#[tauri::command]
+#[allow(dead_code)]
+pub async fn browser_type(state: tauri::State<'_, BrowserState>, selector: String, text: String) -> Result<String, String> {
+    let browser_lock = state.browser.lock().unwrap();
+    let browser = browser_lock.as_ref().ok_or("Browser not launched")?;
+
+    let tab = browser.get_tabs().lock().unwrap().first().ok_or("No tabs open")?.clone();
+    let element = tab.wait_for_element(&selector).map_err(|e| e.to_string())?;
+    element.type_into(&text).map_err(|e| e.to_string())?;
+
+    Ok(format!("Typed into {}: {}", selector, text))
+}
+
+#[tauri::command]
+#[allow(dead_code)]
+pub async fn browser_read_dom(state: tauri::State<'_, BrowserState>) -> Result<String, String> {
+    let browser_lock = state.browser.lock().unwrap();
+    let browser = browser_lock.as_ref().ok_or("Browser not launched")?;
+
+    let tab = browser.get_tabs().lock().unwrap().first().ok_or("No tabs open")?.clone();
+    let content = tab.get_content().map_err(|e| e.to_string())?;
+
+    Ok(content)
+}
+
+#[tauri::command]
+#[allow(dead_code)]
 pub async fn browser_close(state: tauri::State<'_, BrowserState>) -> Result<String, String> {
     let mut browser_lock = state.browser.lock().unwrap();
     *browser_lock = None;

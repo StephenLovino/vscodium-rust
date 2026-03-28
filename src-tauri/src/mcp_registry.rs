@@ -69,4 +69,10 @@ impl McpRegistry {
         
         Err(anyhow::anyhow!("Tool not found: {}", name))
     }
+    pub async fn list_servers(&self) -> Vec<String> {
+        let servers = self.servers.read().await;
+        // For now, return a placeholder since McpClient doesn't store the name internally 
+        // (it's spawned from config). In a real implementation, we'd store the config too.
+        servers.iter().map(|_| "Active MCP Server".to_string()).collect()
+    }
 }
