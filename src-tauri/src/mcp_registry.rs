@@ -1,14 +1,20 @@
 use crate::mcp_client::McpClient;
 use anyhow::Result;
+use tracing::instrument;
+
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use serde_json::Value;
 
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct McpServerConfig {
     pub name: String,
     pub command: String,
     pub args: Vec<String>,
 }
+
 
 pub struct McpRegistry {
     servers: Arc<RwLock<Vec<Arc<McpClient>>>>,
@@ -21,7 +27,9 @@ impl McpRegistry {
         }
     }
 
+    #[instrument(skip(self))]
     pub async fn add_server(&self, config: McpServerConfig) -> Result<()> {
+
         let args: Vec<&str> = config.args.iter().map(|s| s.as_str()).collect();
         let client = McpClient::spawn(&config.command, args)?;
         
@@ -31,7 +39,9 @@ impl McpRegistry {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn list_tools(&self) -> Result<Vec<Value>> {
+
         let servers = self.servers.read().await;
         let mut all_tools = Vec::new();
         
@@ -46,7 +56,9 @@ impl McpRegistry {
         Ok(all_tools)
     }
 
+    #[instrument(skip(self))]
     pub async fn call_tool(&self, name: &str, arguments: Value) -> Result<Value> {
+
         let servers = self.servers.read().await;
         
         // This is a simple implementation that tries to find the tool by name

@@ -6,13 +6,14 @@ use std::thread;
 use tauri::Emitter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ExtensionMetadata {
     #[serde(default)]
     pub id: String,
     pub name: String,
     pub version: String,
     pub main: String,
-    pub path: PathBuf,
+    pub extension_path: PathBuf,
     #[serde(default)]
     pub activation_events: Vec<String>,
     #[serde(default)]
@@ -21,6 +22,8 @@ pub struct ExtensionMetadata {
     pub publisher: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub contributes: Option<serde_json::Value>,
 }
 
 pub struct ExtensionHostManager {
@@ -60,7 +63,7 @@ impl ExtensionHostManager {
                 if package_json_path.exists() {
                     let content = std::fs::read_to_string(&package_json_path)?;
                     if let Ok(mut meta) = serde_json::from_str::<ExtensionMetadata>(&content) {
-                        meta.path = package_json_path.parent().unwrap().to_path_buf();
+                        meta.extension_path = package_json_path.parent().unwrap().to_path_buf();
                         // Construct ID if not present
                         if meta.id.is_empty() {
                             let publisher = meta
@@ -133,5 +136,14 @@ impl ExtensionHostManager {
             stdin.flush()?;
         }
         Ok(())
+    }
+
+    pub fn add_extension(&mut self, meta: ExtensionMetadata) -> std::io::Result<()> {
+        self.extensions.push(meta.clone());
+        let msg = serde_json::json!({
+            "type": "load_extension",
+            "metadata": meta
+        });
+        self.send_message(serde_json::to_string(&msg).unwrap())
     }
 }

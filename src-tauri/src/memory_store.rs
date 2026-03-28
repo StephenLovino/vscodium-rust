@@ -23,4 +23,10 @@ impl MemoryStore {
         let mut lock = self.messages.lock().await;
         lock.push(message.clone());
     }
+
+    pub async fn clear(&self) {
+        let mut lock = self.messages.lock().await;
+        lock.clear();
+    }
 }
+

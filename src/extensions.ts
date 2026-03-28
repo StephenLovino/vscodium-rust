@@ -1,4 +1,5 @@
 import { invoke } from './tauri_bridge.ts';
+import { applyTheme } from './theme_engine.ts';
 import { open } from '@tauri-apps/plugin-dialog';
 
 export function initExtensions() {
@@ -95,7 +96,7 @@ export function initExtensions() {
     refreshInstalledExtensions();
 }
 
-export async function refreshInstalledExtensions() {
+export async function refreshInstalledExtensions(newlyInstalledId?: string) {
     const installedList = document.getElementById("installed-extensions-list");
     if (!installedList) return;
 
@@ -145,6 +146,20 @@ export async function refreshInstalledExtensions() {
                 }
             }
         });
+
+        // Automatically apply theme if this is a newly installed theme extension
+        if (newlyInstalledId) {
+            const newlyInstalled = extensions.find(ext => ext.id === newlyInstalledId);
+            if (newlyInstalled && newlyInstalled.contributes?.themes) {
+                const theme = newlyInstalled.contributes.themes[0];
+                if (theme && theme.path) {
+                    const themePath = newlyInstalled.extensionPath + '/' + theme.path.replace(/^\.\//, '');
+                    console.log("Automatically applying theme:", theme.label, "from", themePath);
+                    const monacoTheme = await applyTheme(themePath);
+                    (window as any).useStore.getState().setTheme(monacoTheme);
+                }
+            }
+        }
 
         (window as any).useStore.getState().setExtensionContributions(contributions);
     } catch (err) {
@@ -235,7 +250,7 @@ function renderMarketplace(extensions: any[], container: HTMLElement) {
                 installBtn.style.border = "1px solid var(--vscode-button-background)";
                 
                 // Proactively apply the extension effects
-                await refreshInstalledExtensions();
+                await refreshInstalledExtensions(ext.namespace + "." + ext.name);
                 console.log("Extension applied automatically");
             } catch (err) {
                 console.error("Installation failed:", err);

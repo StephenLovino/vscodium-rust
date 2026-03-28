@@ -93,6 +93,16 @@ const FileTreeItem: React.FC<{ entry: FileEntry; depth: number; iconThemeMapping
             className={`tree-row${isActive ? ' active' : ''}`}
             onClick={handleToggle}
             onContextMenu={handleContextMenu}
+            draggable={!entry.is_dir}
+            onDragStart={(e) => {
+                if (!entry.is_dir) {
+                    e.dataTransfer.setData('application/vscode-file', JSON.stringify({
+                        path: entry.path,
+                        name: entry.name,
+                        type: 'file'
+                    }));
+                }
+            }}
             style={{
                 ...style,
                 display: 'flex',

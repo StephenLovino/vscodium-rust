@@ -180,7 +180,7 @@ function handleRequest(req) {
             const extension = loadedExtensions.get(extId);
             if (extension) {
                 try {
-                    const mainPath = path.join(extension.path, extension.main);
+                    const mainPath = path.join(extension.extensionPath, extension.main);
                     const extModule = require(mainPath);
                     if (extModule.activate) {
                         const context = { subscriptions: [] }; // Mock context
@@ -221,6 +221,17 @@ function handleRequest(req) {
                 sendResponse({ type: 'error', message: `Command ${req.id} not found` });
             }
             break;
+        case 'load_extension':
+            const meta = req.metadata;
+            if (meta && meta.id) {
+                loadedExtensions.set(meta.id, meta);
+                console.error(`Dynamic extension loaded: ${meta.id}`);
+                // Check for eager activation
+                if (meta.activationEvents && meta.activationEvents.includes('*')) {
+                    activateExtension(meta.id);
+                }
+            }
+            break;
         default:
             sendResponse({ type: 'error', message: `Unknown request type: ${req.type}` });
     }
@@ -247,7 +258,7 @@ async function activateExtension(extId) {
     if (extensions.has(extId)) return; // Already activated
 
     try {
-        const extPath = meta.path;
+        const extPath = meta.extensionPath;
         const mainFile = path.resolve(extPath, meta.main);
 
         const extension = require(mainFile);

@@ -13,6 +13,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::io::{Read, Write};
 use tauri::{Emitter, Listener};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, fmt};
+use tracing_chrome::ChromeLayerBuilder;
+
+
 
 mod hunter;
 use hunter::ApiRadarHunter;
@@ -27,6 +31,7 @@ mod mcp_registry;
 use mcp_registry::McpServerConfig;
 mod task_planner;
 mod memory_store;
+mod browser_bridge;
 mod tool_invoker;
 
 mod lsp;
@@ -341,7 +346,31 @@ async fn install_extension(state: State<'_, EditorState>, publisher: String, nam
         let eh = state.ext_host.lock().unwrap();
         eh.extensions_dir.clone()
     };
-    marketplace::install_extension(publisher, name, version, extensions_dir).await.map_err(|e| e.to_string())
+    
+    let extension_id = marketplace::install_extension(publisher.clone(), name.clone(), version.clone(), extensions_dir.clone())
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Dynamically load the extension
+    let target_dir = extensions_dir.join(format!("{}.{}-{}", publisher, name, version));
+    let mut package_json_path = target_dir.join("package.json");
+    if !package_json_path.exists() {
+        package_json_path = target_dir.join("extension").join("package.json");
+    }
+
+    if package_json_path.exists() {
+        let content = fs::read_to_string(&package_json_path).map_err(|e| e.to_string())?;
+        if let Ok(mut meta) = serde_json::from_str::<extension_host::ExtensionMetadata>(&content) {
+            meta.extension_path = package_json_path.parent().unwrap().to_path_buf();
+            if meta.id.is_empty() {
+                meta.id = format!("{}.{}", publisher, name);
+            }
+            let mut eh = state.ext_host.lock().unwrap();
+            let _ = eh.add_extension(meta);
+        }
+    }
+
+    Ok(extension_id)
 }
 
 #[tauri::command]
@@ -363,9 +392,9 @@ fn install_vsix(_state: State<'_, EditorState>, path: String) -> Result<(), Stri
 }
 
 #[tauri::command]
-fn get_running_extensions(_state: State<'_, EditorState>) -> Vec<String> {
-    // Stub
-    vec![]
+fn get_running_extensions(state: State<'_, EditorState>) -> Vec<extension_host::ExtensionMetadata> {
+    let eh = state.ext_host.lock().unwrap();
+    eh.extensions.clone()
 }
 
 #[tauri::command]
@@ -869,6 +898,12 @@ async fn ai_chat(state: State<'_, EditorState>, request: AiRequest) -> Result<St
 }
 
 #[tauri::command]
+fn stop_ai_agent(state: State<'_, EditorState>) -> Result<(), String> {
+    state._sentient.stop();
+    Ok(())
+}
+
+#[tauri::command]
 fn backend_ping() -> String {
     "Antigravity Pulse: ACTIVE".to_string()
 }
@@ -895,8 +930,53 @@ fn get_installed_themes(_state: State<'_, EditorState>) -> Result<Vec<Value>, St
 }
 
 #[tauri::command]
-fn load_extension_theme(_path: String) -> Result<Value, String> {
-    Ok(json!({}))
+fn load_extension_theme(path: String) -> Result<Value, String> {
+    fn load_theme_recursive(path: &std::path::Path) -> Result<Value, String> {
+        if !path.exists() {
+            return Err(format!("Theme file not found: {:?}", path));
+        }
+        let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+        
+        // Strip comments (JSONC)
+        let re_block = regex::Regex::new(r"/\*[\s\S]*?\*/").unwrap();
+        let re_line = regex::Regex::new(r"//.*").unwrap();
+        let sanitized = re_block.replace_all(&content, "");
+        let sanitized = re_line.replace_all(&sanitized, "");
+        
+        let mut json: Value = serde_json::from_str(&sanitized).map_err(|e| format!("JSON Error in {:?}: {}", path, e))?;
+        
+        // Handle 'include'
+        if let Some(include_path) = json.get("include").and_then(|v| v.as_str()) {
+            let parent = path.parent().unwrap();
+            let included_full_path = parent.join(include_path);
+            let included_json = load_theme_recursive(&included_full_path)?;
+            
+            // Merge included colors into current colors
+            if let Some(included_colors) = included_json.get("colors").and_then(|v| v.as_object()) {
+                if let Some(current_colors) = json.get_mut("colors").and_then(|v| v.as_object_mut()) {
+                    for (key, val) in included_colors {
+                        if !current_colors.contains_key(key) {
+                            current_colors.insert(key.clone(), val.clone());
+                        }
+                    }
+                } else {
+                    // Current file has no 'colors', use included ones
+                    json.as_object_mut().unwrap().insert("colors".to_string(), json!(included_colors));
+                }
+            }
+        }
+        
+        Ok(json)
+    }
+
+    let p = std::path::Path::new(&path);
+    let theme_json = load_theme_recursive(p)?;
+    
+    if let Some(colors) = theme_json.get("colors") {
+        Ok(colors.clone())
+    } else {
+        Ok(json!({}))
+    }
 }
 
 #[tauri::command] fn register_ida_pro() -> Result<(), String> { Ok(()) }
@@ -1030,7 +1110,25 @@ async fn set_ollama_url(
 }
 
 pub fn run() {
+    let filter = EnvFilter::from_default_env()
+        .add_directive(tracing::Level::INFO.into());
+
+    let (chrome_layer, _guard) = ChromeLayerBuilder::new()
+        .include_args(true)
+        .build();
+    
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer())
+        .with(chrome_layer)
+        .init();
+
+    // Leak the guard to keep profiling active for the app's lifetime
+    std::mem::forget(_guard);
+
+
     tauri::Builder::default()
+
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -1075,7 +1173,7 @@ pub fn run() {
             adb_list_devices, adb_list_emulators, spawn_emulator, 
             set_active_device, set_ai_model, register_mcp_server, list_mcp_servers,
             backend_ping, get_git_history, adb_install_and_run,
-            set_ollama_url,
+            set_ollama_url, stop_ai_agent,
             register_ida_pro, ai_execute_command, ai_modify_file,
             get_icon_theme_mapping, hunt_api_keys, optimize_memory,
             start_mitm_server, stop_mitm_server, get_mitm_status,
@@ -1083,7 +1181,7 @@ pub fn run() {
             get_emulator_screenshot, emulator_tap,
             browser::browser_open, browser::browser_navigate, browser::browser_screenshot,
             browser::browser_click, browser::browser_type, browser::browser_read_dom,
-            browser::browser_close
+            browser::browser_capture_vision_context, browser::browser_close
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -25,27 +25,27 @@ impl AiTools {
     pub fn list_tools(&self) -> Vec<ToolDefinition> {
         vec![
             ToolDefinition {
-                name: "read_file".to_string(),
+                name: "view_file".to_string(),
                 description: "Read the content of a file".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "path": { "type": "string", "description": "Relative path to the file" }
+                        "TargetFile": { "type": "string", "description": "Relative path to the file" }
                     },
-                    "required": ["path"]
+                    "required": ["TargetFile"]
                 }),
             },
             ToolDefinition {
-                name: "write_file".to_string(),
+                name: "write_to_file".to_string(),
                 description: "Write content to a file. Overwrites if exists, creates if not."
                     .to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "path": { "type": "string", "description": "Relative path to the file" },
-                        "content": { "type": "string", "description": "Content to write" }
+                        "TargetFile": { "type": "string", "description": "Relative path to the file" },
+                        "CodeContent": { "type": "string", "description": "Content to write" }
                     },
-                    "required": ["path", "content"]
+                    "required": ["TargetFile", "CodeContent"]
                 }),
             },
             ToolDefinition {
@@ -60,7 +60,7 @@ impl AiTools {
                 }),
             },
             ToolDefinition {
-                name: "list_files".to_string(),
+                name: "list_dir".to_string(),
                 description: "List files in a directory".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
@@ -79,6 +79,18 @@ impl AiTools {
                         "command": { "type": "string", "description": "The command to run" }
                     },
                     "required": ["command"]
+                }),
+            },
+            ToolDefinition {
+                name: "grep".to_string(),
+                description: "Fast recursive search within files using system grep or ripgrep".to_string(),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string", "description": "The string to search for" },
+                        "path": { "type": "string", "description": "The directory to search in (default: '.')", "default": "." }
+                    },
+                    "required": ["query"]
                 }),
             },
             ToolDefinition {
@@ -255,12 +267,14 @@ impl AiTools {
 
     pub fn call_tool(&self, name: &str, arguments: Value) -> Result<Value> {
         match name {
-            "read_file" => self.read_file(arguments),
-            "write_file" => self.write_file(arguments),
+            "view_file" => self.read_file(arguments),
+            "write_to_file" => self.write_file(arguments),
             "delete_file" => self.delete_file(arguments),
-            "list_files" => self.list_files(arguments),
+            "list_dir" => self.list_files(arguments),
             "run_command" => self.run_command(arguments),
             "search_files" => self.search_files(arguments),
+            "grep" => self.grep(arguments),
+            "terminal_send_data" => self.terminal_send_data(arguments),
             "browser_open" => self.browser_open(arguments),
             "browser_navigate" => self.browser_navigate(arguments),
             "browser_screenshot" => self.browser_screenshot(arguments),
@@ -282,9 +296,10 @@ impl AiTools {
 
     fn read_file(&self, args: Value) -> Result<Value> {
         let path_str = args
-            .get("path")
+            .get("TargetFile")
+            .or_else(|| args.get("path"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow!("Missing path"))?;
+            .ok_or_else(|| anyhow!("Missing TargetFile"))?;
         let full_path = self.root_path.join(path_str);
 
         // Security check: ensure path is within root
@@ -298,13 +313,15 @@ impl AiTools {
 
     fn write_file(&self, args: Value) -> Result<Value> {
         let path_str = args
-            .get("path")
+            .get("TargetFile")
+            .or_else(|| args.get("path"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow!("Missing path"))?;
+            .ok_or_else(|| anyhow!("Missing TargetFile"))?;
         let content = args
-            .get("content")
+            .get("CodeContent")
+            .or_else(|| args.get("content"))
             .and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow!("Missing content"))?;
+            .ok_or_else(|| anyhow!("Missing CodeContent"))?;
         let full_path = self.root_path.join(path_str);
 
         if !full_path.starts_with(&self.root_path) {
@@ -554,5 +571,34 @@ impl AiTools {
         }
         
         Ok(Value::Array(results))
+    }
+
+    fn grep(&self, args: Value) -> Result<Value> {
+        let query = args.get("query").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing query"))?;
+        let path = args.get("path").and_then(|v| v.as_str()).unwrap_or(".");
+        
+        let output = if cfg!(target_os = "windows") {
+             std::process::Command::new("powershell")
+                .args(&["-Command", &format!("Select-String -Path '{}' -Pattern '{}' -Recursive", path, query)])
+                .current_dir(&self.root_path)
+                .output()?
+        } else {
+            std::process::Command::new("grep")
+                .args(&["-r", "-n", query, path])
+                .current_dir(&self.root_path)
+                .output()?
+        };
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        Ok(serde_json::json!({
+            "results": stdout,
+            "exit_code": output.status.code()
+        }))
+    }
+
+    fn terminal_send_data(&self, args: Value) -> Result<Value> {
+        let data = args.get("data").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing data"))?;
+        // For now, redirecting to run_command as a fallback for the "send data" flow
+        self.run_command(json!({"command": data}))
     }
 }

@@ -14,14 +14,25 @@ interface EditorTab {
 export interface AgentStep {
     name: string;
     status: 'running' | 'success' | 'error';
+    result?: string;
 }
 
 export interface AgentMessage {
     role: 'user' | 'assistant';
     content: string;
+    thoughts?: string;
     steps?: AgentStep[];
     files?: string[];
     artifacts?: { type: 'walkthrough' | 'task'; path: string }[];
+    context?: AttachedContext[];
+}
+
+export interface AttachedContext {
+    type: 'media' | 'mention' | 'workflow' | 'file';
+    id: string; // path or unique id
+    name: string;
+    data?: string;
+    path?: string;
 }
 
 export interface FileEntry {
@@ -54,6 +65,7 @@ interface AppState {
     agentMode: string;
     agentModel: string;
     activeRoot: string | null;
+    activeEditorPath: string;
     activeRootName: string | null;
     activeDevice: string | null;
     emulators: string[];
@@ -72,6 +84,11 @@ interface AppState {
     commandPaletteQuery: string;
     cyberMode: boolean;
     ollamaUrl: string;
+    attachedContext: AttachedContext[];
+
+    // Project Memory (spec-kit / AGENTS.md / CLAUDE.md)
+    projectMemory: string;
+    memoryFiles: string[];
 
     // Actions
     toggleSidebar: () => void;
@@ -90,6 +107,7 @@ interface AppState {
     setAgentMode: (mode: string) => void;
     setAgentModel: (model: string) => void;
     setActiveRoot: (path: string | null) => void;
+    setActiveEditorPath: (path: string) => void;
     setActiveDevice: (id: string | null) => void;
     setEmulators: (ems: string[]) => void;
     setExtensionContributions: (contributions: any) => void;
@@ -105,6 +123,7 @@ interface AppState {
     setCyberMode: (enabled: boolean) => void;
     setOllamaUrl: (url: string) => void;
     openSettings: () => void;
+    setProjectMemory: (content: string, files?: string[]) => void;
 
     // Backend Actions
     backendPing: () => Promise<string>;
@@ -113,10 +132,10 @@ interface AppState {
     addMitmLog: (log: string) => void;
     registerMcpServer: (name: string, command: string, args: string[]) => Promise<void>;
     listMcpServers: () => Promise<void>;
-    addAgentMessage: (role: 'user' | 'assistant', content: string) => void;
+    addAgentMessage: (role: 'user' | 'assistant', content: string, context?: AttachedContext[]) => void;
     updateLastAgentMessage: (content: string) => void;
     addAgentStep: (name: string) => void;
-    updateAgentStepStatus: (name: string, status: 'running' | 'success' | 'error') => void;
+    updateAgentStepStatus: (name: string, status: 'running' | 'success' | 'error', result?: string) => void;
     addAgentFile: (path: string) => void;
     addAgentArtifact: (type: 'walkthrough' | 'task', path: string) => void;
     setIsAgentThinking: (isThinking: boolean) => void;
@@ -126,6 +145,9 @@ interface AppState {
     setContextMenuOpen: (open: boolean, x?: number, y?: number) => void;
     setDebugToolbarOpen: (open: boolean) => void;
     setCommandPaletteQuery: (query: string) => void;
+    addAttachedContext: (item: AttachedContext) => void;
+    removeAttachedContext: (index: number) => void;
+    clearAttachedContext: () => void;
 }
 
 function detectLanguage(filename: string): string {
@@ -163,6 +185,7 @@ export const useStore = create<AppState>((set, get) => ({
     agentMode: 'Planning',
     agentModel: 'Google|gemini-1.5-pro', // Match internal value format
     activeRoot: localStorage.getItem('activeRoot'),
+    activeEditorPath: '',
     activeRootName: localStorage.getItem('activeRootName'),
     activeDevice: null,
     emulators: [],
@@ -184,8 +207,14 @@ export const useStore = create<AppState>((set, get) => ({
     commandPaletteQuery: '',
     cyberMode: false,
     ollamaUrl: 'http://127.0.0.1:11434',
+    attachedContext: [],
+
+    // Project Memory
+    projectMemory: '',
+    memoryFiles: [],
 
     // Actions
+    setProjectMemory: (content, files = []) => set(() => ({ projectMemory: content, memoryFiles: files })),
     toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
     setActiveSidebarView: (view) => set(() => ({ activeSidebarView: view, isSidebarOpen: true })),
     toggleBottomPanel: () => set((state) => ({ isBottomPanelOpen: !state.isBottomPanelOpen })),
@@ -448,35 +477,100 @@ export const useStore = create<AppState>((set, get) => ({
             console.error('List MCP Servers Error:', e);
         }
     },
-    addAgentMessage: (role, content) => set((state) => ({ 
-        agentMessages: [...state.agentMessages, { role, content, steps: role === 'assistant' ? [] : undefined }] 
+    addAgentMessage: (role, content, context) => set((state) => ({ 
+        agentMessages: [...state.agentMessages, { role, content, context, steps: role === 'assistant' ? [] : undefined }] 
     })),
-    updateLastAgentMessage: (content) => set((state) => {
+    updateLastAgentMessage: (content: any) => set((state) => {
         const messages = [...state.agentMessages];
         const lastIndex = messages.length - 1;
         const last = messages[lastIndex];
         if (last && last.role === 'assistant') {
-            messages[lastIndex] = { ...last, content };
+            // Defensive: ensure content is a string even if backend/streaming emits an object
+            const rawContent = typeof content === 'string' 
+                ? content 
+                : (content && typeof content === 'object' && content.content ? content.content : String(content));
+            
+            let newContent = rawContent;
+            let newThoughts = last.thoughts;
+
+            // Extract <think> blocks if present in the new content
+            const thinkMatch = rawContent.match(/<think>([\s\S]*?)<\/think>/);
+            if (thinkMatch) {
+                newThoughts = thinkMatch[1].trim();
+                newContent = rawContent.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+            } else if (rawContent.startsWith('<think>') && !rawContent.includes('</think>')) {
+                // Partial thinking block
+                newThoughts = rawContent.replace('<think>', '').trim();
+                newContent = '';
+            }
+
+            messages[lastIndex] = { ...last, content: newContent, thoughts: newThoughts };
+        }
+        return { agentMessages: messages };
+    }),
+    appendLastAgentMessage: (delta: string) => set((state) => {
+        const messages = [...state.agentMessages];
+        const lastIndex = messages.length - 1;
+        const last = messages[lastIndex];
+        if (last && last.role === 'assistant') {
+            const fullRaw = (last.content || '') + delta; // This is naive but works if we don't have tags yet
+            
+            // Smart append: if we are in a thinking block, append to thoughts
+            // If we are out, append to content.
+            // For simplicity, we re-parse the full string for tags if it's small, 
+            // or we track state. Let's do a simple check.
+            
+            let newContent = last.content;
+            let newThoughts = last.thoughts;
+
+            if (delta.includes('<think>') || last.thoughts !== undefined) {
+                // If we are currently thinking or starting to think
+                const combined = (last.thoughts ? `<think>${last.thoughts}</think>` : '') + (last.content || '') + delta;
+                const thinkMatch = combined.match(/<think>([\s\S]*?)<\/think>/);
+                if (thinkMatch) {
+                    newThoughts = thinkMatch[1].trim();
+                    newContent = combined.replace(/<think>[\s\S]*?<\/think>/, '').trim();
+                } else if (combined.includes('<think>')) {
+                    newThoughts = combined.split('<think>')[1] || '';
+                    newContent = combined.split('<think>')[0] || '';
+                } else {
+                    newContent = combined;
+                }
+            } else {
+                newContent = (last.content || '') + delta;
+            }
+
+            messages[lastIndex] = { ...last, content: newContent, thoughts: newThoughts };
         }
         return { agentMessages: messages };
     }),
     addAgentStep: (name) => set((state) => {
         const messages = [...state.agentMessages];
+        if (messages.length === 0) return state;
         const last = messages[messages.length - 1];
         if (last && last.role === 'assistant') {
-            last.steps = [...(last.steps || []), { name, status: 'running' }];
+            const steps = last.steps || [];
+            // Avoid duplicate steps if redelivered
+            if (!steps.find(s => s.name === name)) {
+                last.steps = [...steps, { name, status: 'running' }];
+            }
         }
         return { agentMessages: messages };
     }),
-    updateAgentStepStatus: (name, status) => set((state) => {
+    updateAgentStepStatus: (name, status, result?: string) => set((state) => {
         const messages = [...state.agentMessages];
+        if (messages.length === 0) return state;
         const last = messages[messages.length - 1];
         if (last && last.role === 'assistant' && last.steps) {
             const step = last.steps.find(s => s.name === name);
-            if (step) step.status = status;
+            if (step) {
+                step.status = status;
+                if (result !== undefined) step.result = result;
+            }
         }
         return { agentMessages: messages };
     }),
+    setActiveEditorPath: (activeEditorPath) => set({ activeEditorPath }),
     setIsAgentThinking: (isAgentThinking) => set({ isAgentThinking }),
     addAgentFile: (path: string) => {
         set((state) => {
@@ -514,6 +608,15 @@ export const useStore = create<AppState>((set, get) => ({
     setContextMenuOpen: (isContextMenuOpen, x = 0, y = 0) => set({ isContextMenuOpen, contextMenuPosition: { x, y } }),
     setDebugToolbarOpen: (isDebugToolbarOpen) => set({ isDebugToolbarOpen }),
     setCommandPaletteQuery: (commandPaletteQuery) => set({ commandPaletteQuery }),
+    addAttachedContext: (item) => set((state) => {
+        const id = item.id || `${item.type}-${item.name}-${Date.now()}`;
+        if (state.attachedContext.find(c => c.id === id)) return state;
+        return { attachedContext: [...state.attachedContext, { ...item, id }] };
+    }),
+    removeAttachedContext: (index) => set((state) => ({
+        attachedContext: state.attachedContext.filter((_, i) => i !== index)
+    })),
+    clearAttachedContext: () => set({ attachedContext: [] }),
     toggleDirectory: async (path: string) => {
         const state = get();
         const node = findNodeRecursive(state.fileTree, path);

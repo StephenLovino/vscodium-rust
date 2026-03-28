@@ -11,10 +11,18 @@ const Editor: React.FC = () => {
     const updateTabContent = useStore(state => state.updateTabContent);
     const saveActiveFile = useStore(state => state.saveActiveFile);
     const theme = useStore(state => state.theme);
+    const setActiveEditorPath = useStore(state => state.setActiveEditorPath);
 
     const activeTab = tabs.find(t => t.id === activeTabId) ?? null;
 
     const editorRef = useRef<any>(null);
+
+    // Update active editor path in store whenever tab changes
+    useEffect(() => {
+        if (activeTab?.path) {
+            setActiveEditorPath(activeTab.path);
+        }
+    }, [activeTabId, activeTab?.path, setActiveEditorPath]);
 
     const handleMount: OnMount = useCallback((editor) => {
         editorRef.current = editor;
