@@ -60,6 +60,19 @@ The only IDE that integrates professional-grade emulators directly into the work
 - **iOS 26.3.1 Breakthrough**: Support for the latest **Virtual iPhone Emulator** running iOS 26.3.1.
 - **Zero Configuration**: Android and iOS simulators ready out of the box.
 
+## Final Word on Purpose
+
+There has been some confusion in the community regarding the specific niche of VSCodium-Rust. Let's set it straight:
+
+VSCodium-Rust is a **General-Purpose Development Environment** for **everyone**. Whether you're building **Web Apps (React, Next.js, etc.)**, **Backend Services (Rust, Go, Node.js)**, or **Microservices**, this IDE is designed for your workflow.
+
+- **For Cybersecurity Researchers**: Its native-grade performance, MCP-based AI assistance for reverse engineering, and low-level control make it an elite tool for security audits and vulnerability research.
+- **For Mobile Developers**: It integrates professional-grade emulators (iOS/Android) as first-class citizens, but mobile support is an *extension* of its core power, not its only purpose.
+
+**VSCodium-Rust is for any developer who demands speed, privacy, and full architectural sovereignty.**
+
+---
+
 ## Credits
 
 This project stands on the shoulders of giants:
@@ -71,9 +84,8 @@ This project stands on the shoulders of giants:
 
 VSCodium-Rust is an ambitious, self-funded project. If you like this project and want to support its continued development, consider buying me a coffee.
 
-[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/H4D3ZS)
+[![Buy Me A Coffee](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/H4D3ZS)
 
 ## License
 
-MIT
 MIT

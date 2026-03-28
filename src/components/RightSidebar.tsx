@@ -52,8 +52,6 @@ const RightSidebar: React.FC = () => {
     const addAgentFile = useStore(state => state.addAgentFile);
     const addAgentArtifact = useStore(state => state.addAgentArtifact);
     const truncateAgentMessages = useStore(state => state.truncateAgentMessages);
-    const activeRootName = useStore(state => state.activeRootName);
-
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -257,7 +255,12 @@ const RightSidebar: React.FC = () => {
                                     
                                     {/* Text content first */}
                                     <div style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: '1.6', color: 'rgba(255,255,255,0.92)', fontSize: '13px' }}>
-                                        {msg.content || (msg.role === 'assistant' && isThinking && !msg.steps?.length ? 'Thinking...' : '')}
+                                        {msg.content || (msg.role === 'assistant' && isThinking && !msg.steps?.length && idx === messages.length - 1 ? (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', opacity: 0.6 }}>
+                                                <i className="codicon codicon-loading spin" style={{ fontSize: '14px' }}></i>
+                                                <span>Thinking...</span>
+                                            </div>
+                                        ) : '')}
                                     </div>
 
                                     {msg.role === 'assistant' && (
@@ -311,14 +314,6 @@ const RightSidebar: React.FC = () => {
                                 </div>
                             </div>
                         ))}
-                        {isThinking && (
-                            <div className="thought-overlay" style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '12px', borderRadius: '8px', border: '1px dashed rgba(255, 255, 255, 0.1)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', opacity: 0.6 }}>
-                                    <i className="codicon codicon-info" style={{ animation: 'pulse 2s infinite' }}></i>
-                                    <span>Antigravity is planning your request...</span>
-                                </div>
-                            </div>
-                        )}
                         <div ref={messagesEndRef} />
                     </div>
                 </div>
