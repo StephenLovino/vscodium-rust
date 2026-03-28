@@ -75,7 +75,7 @@ const ActivityBar: React.FC = () => {
                             )}
                         </div>
                         {item.id === 'scm-view' && <div className="badge dot"></div>}
-                        {item.id === 'extensions-view' && <div className="badge">12</div>}
+                        {item.id === 'extensions-view' && false && <div className="badge">12</div>}
                     </div>
                 ))}
             </div>

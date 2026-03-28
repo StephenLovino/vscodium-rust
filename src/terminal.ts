@@ -1,148 +1,78 @@
 import { invoke, listen } from './tauri_bridge.ts';
 import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
+
+export interface TerminalData {
+    id: string;
+    term: Terminal;
+    fitAddon: FitAddon;
+    shell: string;
+}
 
 export class TerminalManager {
-    terminals: Map<string, any>;
+    terminals: Map<string, TerminalData>;
     activeId: string | null;
-    container: HTMLElement | null;
-    tabsContainer: HTMLElement | null;
     idCounter: number;
 
     constructor() {
         this.terminals = new Map();
         this.activeId = null;
-        this.container = null;
-        this.tabsContainer = null;
         this.idCounter = 1;
-        this.rebind();
     }
 
-    rebind(): void {
-        this.container = document.getElementById("terminal-container");
-        this.tabsContainer = document.getElementById("terminal-tabs");
+    async createTerminal(container: HTMLElement, shell?: string): Promise<string> {
+        const id = `term-${Date.now()}`;
         
-        const newBtn = document.getElementById("new-terminal");
-        if (newBtn) {
-            newBtn.onclick = () => this.createTerminal();
-        }
-
-        // If we have existing terminals, re-append their wrappers to the new container
-        if (this.container && this.terminals.size > 0) {
-            this.container.innerHTML = "";
-            for (const [id, t] of this.terminals.entries()) {
-                this.container.appendChild(t.wrapper);
-                this.createTab(id);
-            }
-            if (this.activeId) {
-                this.switchTo(this.activeId);
-            }
-        }
-    }
-
-    async createTerminal(shell?: string): Promise<void> {
-        const id = `term-${this.idCounter++}`;
-        const wrapper = document.createElement("div");
-        wrapper.className = "terminal-wrapper" + (this.activeId ? " hidden" : "");
-        wrapper.id = `wrapper-${id}`;
-        if (this.container) this.container.appendChild(wrapper);
-
-        const TerminalKlass = (window as any).Terminal;
-        const FitAddonKlass = (window as any).FitAddon ? (window as any).FitAddon.FitAddon : null;
-
-        if (!TerminalKlass) {
-            console.error("Terminal class not found.");
-            return;
-        }
-
-        const term = new TerminalKlass({
-            theme: { background: "#1e1e1e", foreground: "#cccccc" },
+        const term = new Terminal({
+            theme: { 
+                background: "#1e1e1e", 
+                foreground: "#cccccc",
+                cursor: "#cccccc",
+                selectionBackground: "rgba(255, 255, 255, 0.1)"
+            },
             fontSize: 12,
-            fontFamily: 'var(--font-code)',
+            fontFamily: 'var(--font-mono, monospace)',
             cursorBlink: true,
+            allowProposedApi: true
         });
 
-        const terminalData = { term, fitAddon: null, wrapper, shell: shell || (window.navigator.platform.includes('Win') ? 'powershell' : 'zsh') };
-        if (FitAddonKlass) {
-            const fitAddon = new FitAddonKlass();
-            term.loadAddon(fitAddon);
-            terminalData.fitAddon = fitAddon;
-        }
+        const fitAddon = new FitAddon();
+        term.loadAddon(fitAddon);
+        
+        term.open(container);
+        fitAddon.fit();
+
+        const terminalData: TerminalData = { 
+            id, 
+            term, 
+            fitAddon, 
+            shell: shell || (window.navigator.platform.includes('Win') ? 'powershell' : 'zsh') 
+        };
         
         this.terminals.set(id, terminalData);
-        term.open(wrapper);
-        term.write("> Loading terminal backend...\r\n");
-
-        if (terminalData.fitAddon) {
-            setTimeout(() => terminalData.fitAddon.fit(), 100);
-        }
+        this.activeId = id;
 
         term.onData((data: string) => invoke("write_to_terminal", { id, data }));
-        term.onResize(({ cols, rows }: { cols: number, rows: number }) => invoke("resize_terminal", { id, cols, rows }));
-
-        this.createTab(id);
+        term.onResize(({ cols, rows }: { cols: number, rows: number }) => 
+            invoke("resize_terminal", { id, cols, rows })
+        );
 
         try {
-            await invoke("spawn_terminal", { id, shell: shell || null });
+            await invoke("spawn_terminal", { id, shell: terminalData.shell });
         } catch (e) {
             term.write(`\r\n\x1b[31mError spawning terminal: ${e}\x1b[0m\r\n`);
         }
 
-        // Open the bottom panel and switch to Terminal tab
-        if ((window as any).useStore) {
-            (window as any).useStore.getState().setActivePanelTab('TERMINAL');
-        }
-
-        this.switchTo(id);
+        return id;
     }
 
-    createTab(id: string): void {
-        if (!this.tabsContainer) return;
-        
-        const terminalData = this.terminals.get(id);
-        const shellName = terminalData?.shell || "terminal";
-
-        // Remove existing tab if any
-        const existing = Array.from(this.tabsContainer.querySelectorAll(".terminal-tab-btn")).find(el => (el as any).innerText.includes(`(${id.split('-')[1]})`));
-        if (existing) existing.remove();
-
-        const btn = document.createElement("button");
-        btn.className = "terminal-tab-btn" + (this.activeId === id ? " active" : "");
-        btn.innerText = `${shellName} (${id.split('-')[1]})`;
-        btn.onclick = () => this.switchTo(id);
-        
-        const newTermBtn = document.getElementById("new-terminal");
-        if (newTermBtn) {
-            this.tabsContainer.insertBefore(btn, newTermBtn);
-        } else {
-            this.tabsContainer.appendChild(btn);
-        }
-    }
-
-    switchTo(id: string): void {
+    async closeTerminal(id: string): Promise<void> {
         const t = this.terminals.get(id);
-        if (!t) return;
-
-        if (this.activeId) {
-            const active = this.terminals.get(this.activeId);
-            if (active) active.wrapper.classList.add("hidden");
-        }
-        this.activeId = id;
-        t.wrapper.classList.remove("hidden");
-        t.term.focus();
-        if (t.fitAddon) t.fitAddon.fit();
-
-        if (this.tabsContainer) {
-            this.tabsContainer.querySelectorAll(".terminal-tab-btn").forEach((btn: any) => {
-                btn.classList.toggle("active", btn.innerText.includes(`(${id.split('-')[1]})`));
-            });
-        }
-
-        // Ensure bottom panel is open when switching terminals
-        if ((window as any).useStore) {
-            const store = (window as any).useStore.getState();
-            if (!store.isBottomPanelOpen || store.activePanelTab !== 'TERMINAL') {
-                store.setActivePanelTab('TERMINAL');
-            }
+        if (t) {
+            t.term.dispose();
+            this.terminals.delete(id);
+            if (this.activeId === id) this.activeId = null;
         }
     }
 
@@ -150,39 +80,26 @@ export class TerminalManager {
         const t = this.terminals.get(termId);
         if (t) t.term.write(data);
     }
+    
+    resize(id: string) {
+        const t = this.terminals.get(id);
+        if (t) {
+            try { t.fitAddon.fit(); } catch (e) {}
+        }
+    }
 }
 
-export let terminalManager: TerminalManager | null = null;
+export const terminalManager = new TerminalManager();
 
 export async function initTerminal(): Promise<void> {
-    terminalManager = new TerminalManager();
-
     listen("terminal-data", (event: any) => {
         const { term_id, data } = event.payload;
-        if (terminalManager) {
-            terminalManager.handleData(term_id, data);
-        }
+        terminalManager.handleData(term_id, data);
     });
 
     window.addEventListener("resize", () => {
-        if (terminalManager) {
-            for (const [id, t] of terminalManager.terminals.entries()) {
-                if (t.fitAddon) {
-                    try { t.fitAddon.fit(); } catch (e) { }
-                }
-            }
+        for (const id of terminalManager.terminals.keys()) {
+            terminalManager.resize(id);
         }
     });
-
-    (window as any).spawnTerminal = (shell?: string) => {
-        if (terminalManager) {
-            terminalManager.createTerminal(shell);
-        }
-    };
-    
-    (window as any).rebindTerminal = () => {
-        if (terminalManager) {
-            terminalManager.rebind();
-        }
-    };
 }

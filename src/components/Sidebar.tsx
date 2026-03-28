@@ -1,17 +1,48 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useStore, type FileEntry } from '../store';
 import { invoke } from '@tauri-apps/api/core';
-import GitGraph from './GitGraph';
+import { List } from 'react-window';
+import ErrorBoundary from './ErrorBoundary';
+import SearchView from './SearchView';
+import ExtensionsView from './ExtensionsView';
+import ScmView from './ScmView';
+import DebugView from './DebugView';
 import EmulatorPanel from './EmulatorPanel';
 import WorkflowPanel from './WorkflowPanel';
+import AgentSettingsView from './AgentSettingsView';
 
-const FileTreeItem: React.FC<{ entry: FileEntry; depth: number; iconThemeMapping: any }> = ({ entry, depth, iconThemeMapping }) => {
-    const [isCollapsed, setIsCollapsed] = useState(true);
+interface FlattenedNode {
+    entry: FileEntry;
+    depth: number;
+}
+
+const flattenTree = (entries: FileEntry[], depth = 0, visited = new Set<string>()): FlattenedNode[] => {
+    let result: FlattenedNode[] = [];
+    for (const entry of entries) {
+        if (visited.has(entry.path)) continue;
+        visited.add(entry.path);
+        
+        result.push({ entry, depth });
+        if (entry.is_expanded && entry.children) {
+            result = [...result, ...flattenTree(entry.children, depth + 1, visited)];
+        }
+    }
+    return result;
+};
+
+const FileTreeItem: React.FC<{ entry: FileEntry; depth: number; iconThemeMapping: any; style: React.CSSProperties }> = ({ entry, depth, iconThemeMapping, style }) => {
     const openFile = useStore(state => state.openFile);
+    const toggleDirectory = useStore(state => state.toggleDirectory);
+    const activeTabId = useStore(state => state.activeTabId);
+    const tabs = useStore(state => state.tabs);
+    const setContextMenuOpen = useStore(state => state.setContextMenuOpen);
+    
+    const isExpanded = entry.is_expanded ?? false;
+    const isActive = tabs.find(t => t.id === activeTabId)?.path === entry.path;
 
     const getIcon = () => {
         if (entry.is_dir) {
-            return { type: 'icon', value: `codicon codicon-${isCollapsed ? 'chevron-right' : 'chevron-down'}` };
+            return { type: 'icon', value: `codicon codicon-${isExpanded ? 'chevron-down' : 'chevron-right'}` };
         }
         
         if (iconThemeMapping) {
@@ -35,15 +66,10 @@ const FileTreeItem: React.FC<{ entry: FileEntry; depth: number; iconThemeMapping
         return { type: 'icon', value: entry.is_dir ? 'codicon codicon-folder' : 'codicon codicon-file' };
     };
 
-    // Auto-open if it's the root (rel_path is empty)
-    useEffect(() => {
-        if (depth === 0) setIsCollapsed(false);
-    }, [depth]);
-
     const handleToggle = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (entry.is_dir) {
-            setIsCollapsed(!isCollapsed);
+            toggleDirectory(entry.path);
         } else {
             openFile(entry.path).catch(err => console.error(err));
         }
@@ -53,58 +79,87 @@ const FileTreeItem: React.FC<{ entry: FileEntry; depth: number; iconThemeMapping
         e.preventDefault();
         e.stopPropagation();
 
-        // Store context globally for menu handlers.
         (window as any).__explorerContext = {
             path: entry.path,
             name: entry.name,
             isDir: entry.is_dir,
         };
 
-        const menu = document.getElementById('context-menu') as HTMLElement | null;
-        if (menu) {
-            menu.style.left = `${e.clientX}px`;
-            menu.style.top = `${e.clientY}px`;
-            menu.classList.remove('hidden');
-        }
+        setContextMenuOpen(true, e.clientX, e.clientY);
     };
 
     return (
-        <div className="file-tree-item" style={{ userSelect: 'none' }}>
-            <div
-                className={`tree-row${useStore.getState().tabs.find(t => t.id === useStore.getState().activeTabId)?.path === entry.path ? ' active' : ''}`}
-                onClick={handleToggle}
-                onContextMenu={handleContextMenu}
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    height: '22px',
-                    paddingLeft: `${depth * 8 + 12}px`,
-                    cursor: 'pointer',
-                    fontSize: '13px',
-                    color: 'var(--vscode-sideBar-foreground)',
-                    whiteSpace: 'nowrap',
-                    position: 'relative'
-                }}
-            >
-                {/* Selection indicator background would be handle by CSS */}
-                {(() => {
-                    const icon = getIcon();
-                    if (icon.type === 'img') {
-                        return <img src={icon.value} style={{ marginRight: '6px', width: '16px', height: '16px', opacity: 0.9 }} />;
-                    } else {
-                        return <i className={icon.value} style={{ marginRight: '6px', fontSize: '14px', width: '16px', textAlign: 'center', opacity: 0.8 }}></i>;
-                    }
-                })()}
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.name}</span>
-            </div>
-            {!isCollapsed && entry.children && (
-                <div className="tree-children">
-                    {entry.children.map(child => (
-                        <FileTreeItem key={child.path} entry={child} depth={depth + 1} iconThemeMapping={iconThemeMapping} />
-                    ))}
-                </div>
-            )}
+        <div 
+            className={`tree-row${isActive ? ' active' : ''}`}
+            onClick={handleToggle}
+            onContextMenu={handleContextMenu}
+            style={{
+                ...style,
+                display: 'flex',
+                alignItems: 'center',
+                height: '22px',
+                paddingLeft: `${depth * 12 + 12}px`,
+                cursor: 'pointer',
+                fontSize: '13px',
+                color: 'var(--vscode-sideBar-foreground)',
+                whiteSpace: 'nowrap',
+                userSelect: 'none'
+            }}
+        >
+            {(() => {
+                const icon = getIcon();
+                if (icon.type === 'img') {
+                    return <img src={icon.value} style={{ marginRight: '6px', width: '16px', height: '16px', opacity: 0.9 }} />;
+                } else {
+                    return <i className={icon.value} style={{ marginRight: '6px', fontSize: '14px', width: '16px', textAlign: 'center', opacity: 0.8 }}></i>;
+                }
+            })()}
+            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.name}</span>
         </div>
+    );
+};
+
+const VirtualizedFileTree: React.FC<{ entries: FileEntry[]; iconThemeMapping: any }> = ({ entries, iconThemeMapping }) => {
+    const flattenedNodes = useMemo(() => flattenTree(entries), [entries]);
+    const [containerHeight, setContainerHeight] = useState(600);
+    const containerRef = React.useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const observer = new ResizeObserver((entries) => {
+            for (let entry of entries) {
+                const newHeight = Math.floor(entry.contentRect.height);
+                setContainerHeight(prev => Math.abs(prev - newHeight) > 2 ? newHeight : prev);
+            }
+        });
+        observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, []);
+
+    const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
+        const node = flattenedNodes[index];
+        if (!node) return null;
+        return <FileTreeItem entry={node.entry} depth={node.depth} iconThemeMapping={iconThemeMapping} style={style} />;
+    };
+
+    if (flattenedNodes.length === 0) {
+        return <div style={{ padding: '10px 20px', fontSize: '12px', opacity: 0.5 }}>Empty Directory</div>;
+    }
+
+    return (
+        <ErrorBoundary>
+            <div ref={containerRef} style={{ height: '100%', width: '100%', minHeight: '200px', flex: 1, overflow: 'hidden' }}>
+                <List
+                    className="file-explorer-list"
+                    rowCount={flattenedNodes.length}
+                    rowHeight={22}
+                    rowComponent={Row as any}
+                    rowProps={{}}
+                    overscanCount={5}
+                    style={{ height: containerHeight || 600, width: '100%' }}
+                />
+            </div>
+        </ErrorBoundary>
     );
 };
 
@@ -130,13 +185,13 @@ function detectLanguageIcon(filename: string): string {
 const SidebarPane: React.FC<{ title: string; children: React.ReactNode; defaultCollapsed?: boolean; actions?: React.ReactNode }> = ({ title, children, defaultCollapsed = false, actions }) => {
     const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
     return (
-        <div className="sidebar-pane" style={{ display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+        <div className="sidebar-pane" style={{ display: 'flex', flexDirection: 'column', flexShrink: 0, minHeight: isCollapsed ? '35px' : 'auto', flex: isCollapsed ? 0 : 1 }}>
             <div className={`pane-header${isCollapsed ? ' collapsed' : ''}`} onClick={() => setIsCollapsed(!isCollapsed)}>
                 <i className="codicon codicon-chevron-down"></i>
                 <span style={{ flex: 1 }}>{title}</span>
                 {actions && <div className="pane-actions" onClick={e => e.stopPropagation()}>{actions}</div>}
             </div>
-            {!isCollapsed && <div className="pane-content">{children}</div>}
+            {!isCollapsed && <div className="pane-content" style={{ flex: 1, overflow: 'hidden' }}>{children}</div>}
         </div>
     );
 };
@@ -144,442 +199,160 @@ const SidebarPane: React.FC<{ title: string; children: React.ReactNode; defaultC
 const Sidebar: React.FC = () => {
     const activeView = useStore(state => state.activeSidebarView);
     const isOpen = useStore(state => state.isSidebarOpen);
-    const { activeRoot, activeRootName, activeDevice, fileTree, refreshFileTree, setActiveRoot, closeFolder, setActiveSidebarView, refreshAvailableModels, extensionContributions, iconThemeMapping } = useStore();
-    const openFile = useStore(state => state.openFile);
-
-    // API Keys state
-    const [openAIKey, setOpenAIKey] = useState('');
-    const [anthropicKey, setAnthropicKey] = useState('');
-    const [googleKey, setGoogleKey] = useState('');
-    const [alibabaKey, setAlibabaKey] = useState('');
-    const [statusMessage, setStatusMessage] = useState('');
-
-    useEffect(() => {
-        invoke('get_api_keys').then((keys: any) => {
-            if (keys.openai) setOpenAIKey(keys.openai);
-            if (keys.anthropic) setAnthropicKey(keys.anthropic);
-            if (keys.google) setGoogleKey(keys.google);
-            if (keys.alibaba) setAlibabaKey(keys.alibaba);
-        }).catch(err => console.error("Failed to load keys", err));
-    }, []);
+    const { activeRoot, activeRootName, fileTree, refreshFileTree, setActiveRoot, closeFolder, iconThemeMapping, tabs, activeTabId, setActiveTab, closeTab } = useStore();
 
     const handleOpenFolder = async () => {
         try {
-            const result = await invoke<string | null>('open_folder');
-            if (result) {
-                (window as any).activeRoot = result;
-                setActiveRoot(result);
+            const folder = await invoke<string | null>('open_folder');
+            if (folder) {
+                setActiveRoot(folder);
                 await refreshFileTree();
             }
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const saveKeys = async () => {
-        setStatusMessage('Saving...');
-        try {
-            await invoke('save_api_keys', {
-                keys: {
-                    openai: openAIKey,
-                    anthropic: anthropicKey,
-                    google: googleKey,
-                    alibaba: alibabaKey
-                }
-            });
-            await refreshAvailableModels();
-            setStatusMessage('API Keys Saved Successfully.');
-            setTimeout(() => setStatusMessage(''), 3000);
-        } catch (err) {
-            console.error(err);
-            setStatusMessage('Error saving keys.');
+        } catch (error) {
+            console.error('Open Folder Error:', error);
         }
     };
 
     useEffect(() => {
-        // Wire context menu actions once.
         const menu = document.getElementById('context-menu');
         if (!menu) return;
 
         const hideMenu = () => menu.classList.add('hidden');
 
         const handlers: Array<{ id: string; fn: () => void }> = [
-            {
-                id: 'cm-open',
-                fn: () => {
-                    const ctx = (window as any).__explorerContext;
-                    if (!ctx) return;
-                    if (!ctx.isDir) {
-                        openFile(ctx.path).catch((err: any) => console.error(err));
-                    }
-                    hideMenu();
-                },
-            },
-            {
-                id: 'cm-new-file',
-                fn: async () => {
-                    const ctx = (window as any).__explorerContext;
-                    if (!ctx) return;
-                    const baseDir = ctx.isDir ? ctx.path : ctx.path.substring(0, ctx.path.lastIndexOf('/'));
-                    const name = window.prompt('New file name:');
-                    if (!name) return;
-                    try {
-                        await invoke('create_file', { path: `${baseDir}/${name}` });
-                        await refreshFileTree();
-                    } catch (e) {
-                        console.error('Create file failed:', e);
-                    }
-                    hideMenu();
-                },
-            },
-            {
-                id: 'cm-new-folder',
-                fn: async () => {
-                    const ctx = (window as any).__explorerContext;
-                    if (!ctx) return;
-                    const baseDir = ctx.isDir ? ctx.path : ctx.path.substring(0, ctx.path.lastIndexOf('/'));
-                    const name = window.prompt('New folder name:');
-                    if (!name) return;
-                    try {
-                        await invoke('create_directory', { path: `${baseDir}/${name}` });
-                        await refreshFileTree();
-                    } catch (e) {
-                        console.error('Create folder failed:', e);
-                    }
-                    hideMenu();
-                },
-            },
-            {
-                id: 'cm-rename',
-                fn: async () => {
-                    const ctx = (window as any).__explorerContext;
-                    if (!ctx) return;
-                    const parent = ctx.path.includes('/') ? ctx.path.substring(0, ctx.path.lastIndexOf('/')) : '';
-                    const name = window.prompt('Rename to:', ctx.name);
-                    if (!name || name === ctx.name) return;
-                    const newPath = parent ? `${parent}/${name}` : name;
-                    try {
-                        await invoke('rename_path', { oldPath: ctx.path, newPath });
-                        await refreshFileTree();
-                    } catch (e) {
-                        console.error('Rename failed:', e);
-                    }
-                    hideMenu();
-                },
-            },
-            {
-                id: 'cm-delete',
-                fn: async () => {
-                    const ctx = (window as any).__explorerContext;
-                    if (!ctx) return;
-                    const confirmDelete = window.confirm(`Delete '${ctx.name}'? This cannot be undone.`);
-                    if (!confirmDelete) return;
-                    try {
-                        await invoke('delete_path', { path: ctx.path });
-                        await refreshFileTree();
-                    } catch (e) {
-                        console.error('Delete failed:', e);
-                    }
-                    hideMenu();
-                },
-            },
-            {
-                id: 'cm-palette',
-                fn: () => {
-                    hideMenu();
-                    (window as any).showCommandPalette?.();
-                },
-            },
+            { id: 'cm-open', fn: () => {
+                const ctx = (window as any).__explorerContext;
+                if (!ctx) return;
+                if (!ctx.isDir) {
+                    useStore.getState().openFile(ctx.path).catch(err => console.error(err));
+                }
+                hideMenu();
+            }},
+            { id: 'cm-new-file', fn: async () => {
+                const ctx = (window as any).__explorerContext;
+                if (!ctx) return;
+                const baseDir = ctx.isDir ? ctx.path : ctx.path.substring(0, ctx.path.lastIndexOf('/'));
+                const name = window.prompt('New file name:');
+                if (!name) return;
+                try {
+                    await invoke('create_file', { path: `${baseDir}/${name}` });
+                    await refreshFileTree();
+                } catch (e) { console.error(e); }
+                hideMenu();
+            }},
+            { id: 'cm-new-folder', fn: async () => {
+                const ctx = (window as any).__explorerContext;
+                if (!ctx) return;
+                const baseDir = ctx.isDir ? ctx.path : ctx.path.substring(0, ctx.path.lastIndexOf('/'));
+                const name = window.prompt('New folder name:');
+                if (!name) return;
+                try {
+                    await invoke('create_directory', { path: `${baseDir}/${name}` });
+                    await refreshFileTree();
+                } catch (e) { console.error(e); }
+                hideMenu();
+            }},
+            { id: 'cm-rename', fn: async () => {
+                const ctx = (window as any).__explorerContext;
+                if (!ctx) return;
+                const parent = ctx.path.includes('/') ? ctx.path.substring(0, ctx.path.lastIndexOf('/')) : '';
+                const name = window.prompt('Rename to:', ctx.name);
+                if (!name || name === ctx.name) return;
+                const newPath = parent ? `${parent}/${name}` : name;
+                try {
+                    await invoke('rename_path', { oldPath: ctx.path, newPath });
+                    await refreshFileTree();
+                } catch (e) { console.error(e); }
+                hideMenu();
+            }},
+            { id: 'cm-delete', fn: async () => {
+                const ctx = (window as any).__explorerContext;
+                if (!ctx) return;
+                const confirmDelete = window.confirm(`Delete '${ctx.name}'?`);
+                if (!confirmDelete) return;
+                try {
+                    await invoke('delete_path', { path: ctx.path });
+                    await refreshFileTree();
+                } catch (e) { console.error(e); }
+                hideMenu();
+            }},
         ];
 
         handlers.forEach(({ id, fn }) => {
             const el = document.getElementById(id);
-            if (el) {
-                el.onclick = (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    fn();
-                };
-            }
+            if (el) el.onclick = (e) => { e.preventDefault(); e.stopPropagation(); fn(); };
         });
 
-        const onGlobalClick = (e: MouseEvent) => {
-            if (!(e.target as HTMLElement).closest('#context-menu')) {
-                hideMenu();
-            }
-        };
+        const onGlobalClick = () => hideMenu();
         document.addEventListener('click', onGlobalClick);
-        document.addEventListener('contextmenu', onGlobalClick);
-
-        return () => {
-            document.removeEventListener('click', onGlobalClick);
-            document.removeEventListener('contextmenu', onGlobalClick);
-        };
-    }, [openFile]);
-
-    const handleNewFile = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const root = activeRoot;
-        if (!root) return;
-        const name = window.prompt('New file name:');
-        if (!name) return;
-        try {
-            await invoke('create_file', { path: `${root}/${name}` });
-            await refreshFileTree();
-        } catch (e) {
-            console.error('Create file failed:', e);
-        }
-    };
-
-    const handleNewFolder = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const root = activeRoot;
-        if (!root) return;
-        const name = window.prompt('New folder name:');
-        if (!name) return;
-        try {
-            await invoke('create_directory', { path: `${root}/${name}` });
-            await refreshFileTree();
-        } catch (e) {
-            console.error('Create folder failed:', e);
-        }
-    };
-
-    const handleRefresh = async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        await refreshFileTree();
-    };
-
-    const handleCloseFolder = (e: React.MouseEvent) => {
-        e.stopPropagation();
-        closeFolder();
-    };
+        return () => document.removeEventListener('click', onGlobalClick);
+    }, [refreshFileTree]);
 
     if (!isOpen) return null;
 
     const titles: Record<string, string> = {
-        'explorer-view': 'Explorer',
-        'search-view': 'Search',
-        'scm-view': 'Source Control (Graph)',
-        'debug-view': 'Run and Debug',
-        'extensions-view': 'Extensions',
-        'specs-view': 'Specs',
-        'agent-view': 'Agent',
-        'planning-view': 'Planning & History',
-        'mobile-view': 'Mobile (Android & iOS)'
+        'explorer-view': 'EXPLORER',
+        'search-view': 'SEARCH',
+        'scm-view': 'SOURCE CONTROL',
+        'debug-view': 'RUN AND DEBUG',
+        'extensions-view': 'EXTENSIONS',
+        'specs-view': 'SPECS',
+        'agent-view': 'AGENT SETTINGS',
+        'planning-view': 'PLANNING',
+        'mobile-view': 'MOBILE EMULATORS'
     };
 
     return (
         <aside className="sidebar" id="sidebar" style={{ background: 'var(--vscode-sideBar-background)', color: 'var(--vscode-sideBar-foreground)', display: 'flex', flexDirection: 'column', width: '100%', height: '100%', borderRight: '1px solid var(--vscode-panel-border)' }}>
-            {activeView === 'explorer-view' && (
-                <div id="explorer-content" className="sidebar-content" style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1 }}>
-                    <SidebarPane title="Open Editors" defaultCollapsed={false}>
-                        <div className="open-editors-list">
-                            {useStore.getState().tabs.map(tab => (
-                                <OpenEditorsItem 
-                                    key={tab.id} 
-                                    tab={tab} 
-                                    active={useStore.getState().activeTabId === tab.id}
-                                    onClick={() => useStore.getState().setActiveTab(tab.id)}
-                                    onClose={() => useStore.getState().closeTab(tab.id)}
-                                />
-                            ))}
-                            {useStore.getState().tabs.length === 0 && (
-                                <div style={{ padding: '8px 20px', fontSize: '12px', opacity: 0.5 }}>No editors open</div>
-                            )}
-                        </div>
-                    </SidebarPane>
+            <div className="sidebar-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 12px', height: '35px', minHeight: '35px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600 }}>{titles[activeView] || activeView.toUpperCase()}</div>
+            </div>
 
-                    <SidebarPane 
-                        title={activeRootName || 'No Folder Opened'} 
-                        actions={activeRoot ? (
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingRight: '8px' }}>
-                                <i className="codicon codicon-new-file" onClick={handleNewFile} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="New File"></i>
-                                <i className="codicon codicon-new-folder" onClick={handleNewFolder} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="New Folder"></i>
-                                <i className="codicon codicon-refresh" onClick={handleRefresh} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Refresh Explorer"></i>
-                                <i className="codicon codicon-close-all" onClick={handleCloseFolder} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Close Folder"></i>
-                            </div>
-                        ) : null}
-                    >
-                        {(activeRoot && fileTree.length > 0) ? (
-                            <div className="file-tree" style={{ width: '100%' }}>
-                                {fileTree.map(entry => (
-                                    <FileTreeItem key={entry.path} entry={entry} depth={0} iconThemeMapping={iconThemeMapping} />
-                                ))}
-                            </div>
-                        ) : (
-                            <div style={{ padding: '10px 0' }}>
-                                <div style={{ padding: '10px 20px', opacity: 0.6, fontSize: '12px' }}>
-                                    You have not yet opened a folder.
+            <div className="sidebar-content-wrapper" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                {activeView === 'explorer-view' && (
+                    <div className="sidebar-content" style={{ display: 'flex', flexDirection: 'column', overflowY: 'hidden', flex: 1 }}>
+                        <SidebarPane 
+                            title={activeRootName || 'No Folder Opened'} 
+                            defaultCollapsed={false}
+                            actions={activeRoot ? (
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', paddingRight: '8px' }}>
+                                    <i className="codicon codicon-new-file" onClick={() => (window as any).cm_new_file?.()} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="New File"></i>
+                                    <i className="codicon codicon-new-folder" onClick={() => (window as any).cm_new_folder?.()} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="New Folder"></i>
+                                    <i className="codicon codicon-collapse-all" onClick={refreshFileTree} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Collapse Folders"></i>
+                                    <i className="codicon codicon-refresh" onClick={refreshFileTree} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Refresh"></i>
                                 </div>
-                                <button
-                                    className="primary-button"
-                                    id="explorer-open-folder"
-                                    onClick={handleOpenFolder}
-                                    style={{ background: 'var(--vscode-button-background)', color: 'var(--vscode-button-foreground)', border: 'none', padding: '6px 10px', borderRadius: '2px', cursor: 'pointer', fontSize: '13px', margin: '0 20px', width: 'calc(100% - 40px)' }}
-                                >Open Folder</button>
-                            </div>
-                        )}
-                    </SidebarPane>
-                </div>
-            )}
-
-            <div id="agent-view" className={`sidebar-section ${activeView === 'agent-view' ? '' : 'hidden'}`}>
-                <div className="sidebar-section-header">AGENT SETTINGS</div>
-                <div className="sidebar-content" style={{ padding: '15px' }}>
-                    <div style={{ marginBottom: '10px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8, fontSize: '11px' }}>OpenAI API Key</label>
-                        <input type="password" value={openAIKey} onChange={(e) => setOpenAIKey(e.target.value)} id="openai-api-key" placeholder="sk-..." style={{ width: '100%', boxSizing: 'border-box', background: 'var(--vscode-input-background)', color: 'var(--vscode-sideBar-foreground)', border: '1px solid transparent', padding: '4px 6px', fontSize: '12px', outline: 'none' }} />
-                    </div>
-                    <div style={{ marginBottom: '10px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8, fontSize: '11px' }}>Anthropic API Key</label>
-                        <input type="password" value={anthropicKey} onChange={(e) => setAnthropicKey(e.target.value)} id="anthropic-api-key" placeholder="sk-ant-..." style={{ width: '100%', boxSizing: 'border-box', background: 'var(--vscode-input-background)', color: 'var(--vscode-sideBar-foreground)', border: '1px solid transparent', padding: '4px 6px', fontSize: '12px', outline: 'none' }} />
-                    </div>
-                    <div style={{ marginBottom: '15px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8, fontSize: '11px' }}>Google API Key</label>
-                        <input type="password" value={googleKey} onChange={(e) => setGoogleKey(e.target.value)} id="google-api-key" placeholder="AIza..." style={{ width: '100%', boxSizing: 'border-box', background: 'var(--vscode-input-background)', color: 'var(--vscode-sideBar-foreground)', border: '1px solid transparent', padding: '4px 6px', fontSize: '12px', outline: 'none' }} />
-                    </div>
-                    <div style={{ marginBottom: '15px' }}>
-                        <label style={{ display: 'block', marginBottom: '5px', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8, fontSize: '11px' }}>Alibaba API Key</label>
-                        <input type="password" value={alibabaKey} onChange={(e) => setAlibabaKey(e.target.value)} id="alibaba-api-key" placeholder="sk-..." style={{ width: '100%', boxSizing: 'border-box', background: 'var(--vscode-input-background)', color: 'var(--vscode-sideBar-foreground)', border: '1px solid transparent', padding: '4px 6px', fontSize: '12px', outline: 'none' }} />
-                    </div>
-                    <button className="primary-button" id="save-api-keys" onClick={saveKeys} style={{ width: '100%', marginTop: '10px', background: 'var(--vscode-statusBar-background)', color: '#fff', border: 'none', padding: '6px', cursor: 'pointer', fontSize: '12px' }}>Save Keys</button>
-                    {statusMessage && <div id="api-key-status" style={{ marginTop: '10px', fontSize: '11px', textAlign: 'center', color: '#89d185' }}>{statusMessage}</div>}
-                </div>
-            </div>
-
-            <div id="search-view" className={`sidebar-section ${activeView === 'search-view' ? '' : 'hidden'}`}>
-                <div className="sidebar-section-header">SEARCH</div>
-                <div className="sidebar-search-container">
-                    <input type="text" id="search-input" placeholder="Search" />
-                </div>
-                <div id="search-results" className="sidebar-content"></div>
-            </div>
-
-            <div id="extensions-view" className={`sidebar-section ${activeView === 'extensions-view' ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <div className="sidebar-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>EXTENSIONS</div>
-                    <div className="extensions-actions" style={{ marginRight: '10px' }}>
-                        <i className="codicon codicon-cloud-upload" id="install-vsix-btn" title="Install from VSIX..." style={{ cursor: 'pointer', fontSize: '14px' }}></i>
-                    </div>
-                </div>
-                <div className="sidebar-search-container" style={{ padding: '10px' }}>
-                    <input type="text" id="extensions-search-input" placeholder="Search Extensions in Marketplace" style={{ width: '100%', boxSizing: 'border-box', background: 'var(--vscode-input-background)', color: 'var(--vscode-sideBar-foreground)', border: '1px solid transparent', padding: '4px 6px', fontSize: '12px', outline: 'none' }} />
-                </div>
-                <div id="extensions-content" className="sidebar-content" style={{ flex: 1, overflowY: 'auto' }}>
-                    <div className="accordion-header" id="installed-accordion-header" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', fontSize: '11px', fontWeight: 'bold' }}>
-                        <i className="codicon codicon-chevron-down accordion-icon" style={{ marginRight: '6px' }}></i>
-                        <span className="accordion-title" style={{ flex: 1 }}>INSTALLED</span>
-                        <span className="accordion-badge" id="installed-count-badge" style={{ background: '#333', padding: '0 6px', borderRadius: '10px', fontSize: '10px' }}>0</span>
-                    </div>
-                    <div id="installed-extensions-list" className="accordion-content"></div>
-
-                    <div className="accordion-header" id="recommended-accordion-header" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', fontSize: '11px', fontWeight: 'bold', borderTop: '1px solid var(--vscode-panel-border)' }}>
-                        <i className="codicon codicon-chevron-down accordion-icon" style={{ marginRight: '6px' }}></i>
-                        <span className="accordion-title" style={{ flex: 1 }}>RECOMMENDED</span>
-                        <span className="accordion-badge" id="recommended-count-badge" style={{ background: '#333', padding: '0 6px', borderRadius: '10px', fontSize: '10px' }}>8</span>
-                    </div>
-                    <div id="recommended-extensions-list" className="accordion-content"></div>
-
-                    <div className="accordion-header" id="marketplace-accordion-header" style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', cursor: 'pointer', background: 'rgba(255,255,255,0.05)', fontSize: '11px', fontWeight: 'bold', borderTop: '1px solid var(--vscode-panel-border)' }}>
-                        <i className="codicon codicon-chevron-down accordion-icon" style={{ marginRight: '6px' }}></i>
-                        <span className="accordion-title" style={{ flex: 1 }}>MARKETPLACE</span>
-                    </div>
-                    <div id="marketplace-extensions-list" className="accordion-content"></div>
-                </div>
-            </div>
-
-            <div id="specs-view" className={`sidebar-section ${activeView === 'specs-view' ? '' : 'hidden'}`}>
-                <div className="sidebar-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div><i className="codicon codicon-chevron-down" style={{ marginRight: '4px' }}></i> SPECS</div>
-                    <div className="specs-actions" style={{ marginRight: '10px' }}>
-                        <i className="codicon codicon-add" id="new-spec" onClick={() => import('../specs').then(m => (m as any).createNewSpec())} title="New Spec" style={{ cursor: 'pointer' }}></i>
-                    </div>
-                </div>
-                <div id="specs-content" className="sidebar-content" style={{ padding: '10px' }}>
-                    <div className="specs-empty" id="specs-empty" style={{ fontSize: '12px', opacity: 0.6, fontStyle: 'italic' }}>No active specs. Create one to start a structured workflow.</div>
-                    <div id="specs-list" className="specs-list"></div>
-                </div>
-            </div>
-
-            <div id="mobile-view" className={`sidebar-section ${activeView === 'mobile-view' ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-                <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: '35px', minHeight: '35px', borderBottom: '1px solid var(--vscode-panel-border)', background: 'var(--vscode-sideBar-background)' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', flex: 1, color: 'var(--vscode-sideBar-foreground)', opacity: 0.8 }}>MOBILE EMULATORS</span>
-                    <i className="codicon codicon-refresh" id="refresh-mobile" title="Refresh Devices" style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }}></i>
-                </div>
-                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    {activeDevice ? (
-                        <EmulatorPanel />
-                    ) : (
-                        <div id="mobile-content" className="sidebar-content" style={{ padding: '0', height: '100%', overflowY: 'auto' }}>
-                            <div style={{ fontSize: '12px', opacity: 0.6, textAlign: 'center', marginTop: '20px' }}>No devices connected.</div>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div id="source-control-view" className={`sidebar-section ${activeView === 'scm-view' ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-                <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', padding: '0 12px', height: '35px', minHeight: '35px', borderBottom: '1px solid var(--vscode-panel-border)', background: 'var(--vscode-sideBar-background)' }}>
-                    <span style={{ fontSize: '11px', fontWeight: 600, textTransform: 'uppercase', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--vscode-sideBar-foreground)', opacity: 0.8 }}>
-                        GIT HISTORY
-                    </span>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                         <i className="codicon codicon-refresh" onClick={() => (window as any).refreshGitHistory?.()} style={{ cursor: 'pointer', fontSize: '14px', opacity: 0.8 }} title="Refresh History"></i>
-                    </div>
-                </div>
-                <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                        <GitGraph />
-                    </div>
-                </div>
-            </div>
-
-            <div id="debug-view" className={`sidebar-section ${activeView === 'debug-view' ? '' : 'hidden'}`}>
-                <div className="sidebar-section-header">RUN AND DEBUG</div>
-                <div className="debug-controls">
-                    <button id="start-debug" className="debug-btn primary">Start Debugging</button>
-                </div>
-                <div id="debug-content" className="sidebar-content">
-                    <div className="debug-section">
-                        <div className="debug-section-header"><i className="codicon codicon-chevron-right" style={{ marginRight: '4px' }}></i> VARIABLES</div>
-                        <div id="debug-variables" className="debug-section-content"></div>
-                    </div>
-                    <div className="debug-section">
-                        <div className="debug-section-header"><i className="codicon codicon-chevron-right" style={{ marginRight: '4px' }}></i> WATCH</div>
-                        <div id="debug-watch" className="debug-section-content"></div>
-                    </div>
-                    <div className="debug-section">
-                        <div className="debug-section-header"><i className="codicon codicon-chevron-down" style={{ marginRight: '4px' }}></i> CALL STACK</div>
-                        <div id="debug-callstack" className="debug-section-content"></div>
-                    </div>
-                    <div className="debug-section">
-                        <div className="debug-section-header"><i className="codicon codicon-chevron-down" style={{ marginRight: '4px' }}></i> BREAKPOINTS</div>
-                        <div id="debug-breakpoints" className="debug-section-content"></div>
-                    </div>
-                </div>
-            </div>
-
-            <div id="planning-view" className={`sidebar-section ${activeView === 'planning-view' ? '' : 'hidden'}`} style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-                <div className="sidebar-section-header">GIT PLANNING & WORKFLOW</div>
-                <div style={{ flex: 1, overflowY: 'auto' }}>
-                    <WorkflowPanel />
-                </div>
-            </div>
-
-            {/* Render Extension Views if present */}
-            {extensionContributions?.views?.[activeView] && (
-                <div className="sidebar-content" style={{ display: 'flex', flexDirection: 'column', overflowY: 'auto', flex: 1 }}>
-                    <div className="sidebar-section-header" style={{ textTransform: 'uppercase' }}>{activeView}</div>
-                    {extensionContributions.views[activeView].map((view: any) => (
-                        <SidebarPane key={view.id} title={view.name} defaultCollapsed={false}>
-                            <div style={{ padding: '20px', textAlign: 'center', opacity: 0.6, fontSize: '12px' }}>
-                                View: {view.name}<br/>
-                                <span style={{ fontSize: '10px' }}>[Extension Contributed View]</span>
+                            ) : null}
+                        >
+                            <div style={{ flex: 1, minHeight: '300px' }}>
+                                {activeRoot ? (
+                                    <div className="file-tree" style={{ height: '100%' }}>
+                                        {fileTree.length > 0 ? (
+                                            <React.Suspense fallback={<div style={{ padding: '20px', opacity: 0.5 }}>Loading...</div>}>
+                                                <VirtualizedFileTree entries={fileTree} iconThemeMapping={iconThemeMapping} />
+                                            </React.Suspense>
+                                        ) : (
+                                            <div style={{ padding: '10px 20px', fontSize: '12px', opacity: 0.5 }}>Empty Directory</div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div style={{ padding: '20px', textAlign: 'center' }}>
+                                        <p style={{ fontSize: '12px', opacity: 0.7, marginBottom: '12px' }}>You have not yet opened a folder.</p>
+                                        <button className="primary-button" onClick={handleOpenFolder} style={{ width: '100%', padding: '6px', fontSize: '13px' }}>Open Folder</button>
+                                    </div>
+                                )}
                             </div>
                         </SidebarPane>
-                    ))}
-                </div>
-            )}
+                    </div>
+                )}
+
+                {activeView === 'search-view' && <SearchView />}
+                {activeView === 'scm-view' && <ScmView />}
+                {activeView === 'debug-view' && <DebugView />}
+                {activeView === 'extensions-view' && <ExtensionsView />}
+                {activeView === 'agent-view' && <AgentSettingsView />}
+                {activeView === 'mobile-view' && <EmulatorPanel />}
+                {activeView === 'planning-view' && <WorkflowPanel />}
+            </div>
         </aside>
     );
 };

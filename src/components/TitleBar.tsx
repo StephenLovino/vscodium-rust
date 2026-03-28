@@ -19,12 +19,21 @@ const TitleBar: React.FC = () => {
     };
 
     const handleItemClick = (item: string) => {
-        console.log(`Menu item clicked: ${item}`);
-        if (item === 'New Terminal') {
-            (window as any).spawnTerminal?.();
+        const execute = (window as any).executeCommand;
+        if (!execute) {
+            console.error('Command system not initialized');
+            return;
         }
-        if (item === 'Command Palette...') {
-            (window as any).showCommandPalette?.();
+
+        switch (item) {
+            case 'New File': execute('explorer.newFile'); break;
+            case 'New Folder': execute('explorer.newFolder'); break;
+            case 'Open...': execute('explorer.openFolder'); break;
+            case 'Save': execute('workbench.action.files.save'); break;
+            case 'Command Palette...': execute('workbench.action.showCommands'); break;
+            case 'Welcome': execute('workbench.action.showWelcome'); break;
+            case 'New Terminal': (window as any).spawnTerminal?.(); break;
+            default: console.log(`Menu item clicked: ${item}`);
         }
         setActiveMenu(null);
     };

@@ -11,10 +11,24 @@ interface EditorTab {
     type?: 'file' | 'settings';
 }
 
+export interface AgentStep {
+    name: string;
+    status: 'running' | 'success' | 'error';
+}
+
+export interface AgentMessage {
+    role: 'user' | 'assistant';
+    content: string;
+    steps?: AgentStep[];
+    files?: string[];
+    artifacts?: { type: 'walkthrough' | 'task'; path: string }[];
+}
+
 export interface FileEntry {
     name: string;
     path: string;
     is_dir: boolean;
+    is_expanded?: boolean;
     children?: FileEntry[];
 }
 
@@ -47,6 +61,17 @@ interface AppState {
     extensionContributions: any;
     mitmStatus: 'idle' | 'running' | 'error';
     mitmLogs: string[];
+    mcpServers: string[];
+    ollamaStatus: 'idle' | 'checking' | 'running' | 'error';
+    agentMessages: AgentMessage[];
+    isAgentThinking: boolean;
+    isCommandPaletteOpen: boolean;
+    isContextMenuOpen: boolean;
+    isDebugToolbarOpen: boolean;
+    contextMenuPosition: { x: number, y: number };
+    commandPaletteQuery: string;
+    cyberMode: boolean;
+    ollamaUrl: string;
 
     // Actions
     toggleSidebar: () => void;
@@ -68,14 +93,17 @@ interface AppState {
     setActiveDevice: (id: string | null) => void;
     setEmulators: (ems: string[]) => void;
     setExtensionContributions: (contributions: any) => void;
-    refreshAvailableModels: () => Promise<void>;
+    refreshAvailableModels: (provider?: string) => Promise<void>;
     refreshFileTree: () => Promise<void>;
+    toggleDirectory: (path: string) => Promise<void>;
     closeFolder: () => void;
     openFile: (path: string) => Promise<void>;
     closeTab: (id: string) => void;
     setActiveTab: (id: string) => void;
     updateTabContent: (id: string, content: string) => void;
     saveActiveFile: () => Promise<void>;
+    setCyberMode: (enabled: boolean) => void;
+    setOllamaUrl: (url: string) => void;
     openSettings: () => void;
 
     // Backend Actions
@@ -83,6 +111,21 @@ interface AppState {
     startMitm: () => Promise<void>;
     stopMitm: () => Promise<void>;
     addMitmLog: (log: string) => void;
+    registerMcpServer: (name: string, command: string, args: string[]) => Promise<void>;
+    listMcpServers: () => Promise<void>;
+    addAgentMessage: (role: 'user' | 'assistant', content: string) => void;
+    updateLastAgentMessage: (content: string) => void;
+    addAgentStep: (name: string) => void;
+    updateAgentStepStatus: (name: string, status: 'running' | 'success' | 'error') => void;
+    addAgentFile: (path: string) => void;
+    addAgentArtifact: (type: 'walkthrough' | 'task', path: string) => void;
+    setIsAgentThinking: (isThinking: boolean) => void;
+    clearAgentMessages: () => void;
+    truncateAgentMessages: (index: number) => void;
+    setCommandPaletteOpen: (open: boolean) => void;
+    setContextMenuOpen: (open: boolean, x?: number, y?: number) => void;
+    setDebugToolbarOpen: (open: boolean) => void;
+    setCommandPaletteQuery: (query: string) => void;
 }
 
 function detectLanguage(filename: string): string {
@@ -130,6 +173,17 @@ export const useStore = create<AppState>((set, get) => ({
     },
     mitmStatus: 'idle',
     mitmLogs: [],
+    mcpServers: [],
+    ollamaStatus: 'idle',
+    agentMessages: [],
+    isAgentThinking: false,
+    isCommandPaletteOpen: false,
+    isContextMenuOpen: false,
+    isDebugToolbarOpen: false,
+    contextMenuPosition: { x: 0, y: 0 },
+    commandPaletteQuery: '',
+    cyberMode: false,
+    ollamaUrl: 'http://127.0.0.1:11434',
 
     // Actions
     toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
@@ -165,12 +219,17 @@ export const useStore = create<AppState>((set, get) => ({
         } else {
             localStorage.removeItem('activeRoot');
             localStorage.removeItem('activeRootName');
-            set({ activeRoot: null, activeRootName: null });
+            set({ activeRoot: null, activeRootName: null, fileTree: [] });
         }
     },
     setActiveDevice: (activeDevice) => set({ activeDevice }),
     setEmulators: (emulators) => set({ emulators }),
     setExtensionContributions: (extensionContributions) => set({ extensionContributions }),
+    setCyberMode: (enabled) => set({ cyberMode: enabled }),
+    setOllamaUrl: (url) => {
+        set({ ollamaUrl: url });
+        invoke('set_ollama_url', { url }).catch(console.error);
+    },
 
     refreshFileTree: async () => {
         try {
@@ -188,6 +247,10 @@ export const useStore = create<AppState>((set, get) => ({
         localStorage.removeItem('activeRootName');
         invoke('set_active_root', { path: null });
         set({ activeRoot: null, activeRootName: null, fileTree: [] });
+    },
+    showWelcomeTab: () => {
+        const { openFile } = get().activeTabId !== undefined ? get() : { openFile: (p:string) => {} };
+        (get() as any).openFile('Welcome');
     },
 
     openFile: async (path: string) => {
@@ -269,27 +332,75 @@ export const useStore = create<AppState>((set, get) => ({
         }
     },
 
-    refreshAvailableModels: async () => {
+    refreshAvailableModels: async (targetProvider?: string) => {
+        const { ollamaUrl } = get();
         try {
             const keys: any = await invoke('get_api_keys');
-            const providers = [];
+            const providers: string[] = [];
             if (keys.google) providers.push('Google');
             if (keys.anthropic) providers.push('Anthropic');
             if (keys.openai) providers.push('OpenAI');
-            if (keys.alibaba) providers.push('Alibaba');
+            if (keys.openrouter) providers.push('Openrouter');
+            if (keys.mistral) providers.push('Mistral');
+            if (keys.groq) providers.push('Groq');
             if (keys.xai) providers.push('xAI');
-            if (keys.apiradar || true) providers.push('ApiRadar'); // Always include for free models
+            if (keys.alibaba) providers.push('Alibaba');
+            providers.push('ApiRadar'); // Always include for aggregated view
+            
+            // Always try Ollama if requested or by default
+            if (targetProvider === 'ollama' || !targetProvider) {
+                providers.push('Ollama');
+            }
 
             let allModels: { id: string, provider: string }[] = [];
-            for (const p of providers) {
+            
+            // Fix case sensitivity and provider mapping
+            const activeProviders = targetProvider 
+                ? [targetProvider.toLowerCase() === 'apiradar' ? 'ApiRadar' : targetProvider.charAt(0).toUpperCase() + targetProvider.slice(1).toLowerCase()] 
+                : providers;
+
+            for (const p of activeProviders) {
                 try {
+                    if (p.toLowerCase() === 'ollama') {
+                        // Ensure backend has the latest URL before listing
+                        await invoke('set_ollama_url', { url: ollamaUrl });
+                    }
                     const models = await invoke<string[]>('list_provider_models', { provider: p });
                     allModels = [...allModels, ...models.map(m => ({ id: m, provider: p.toLowerCase() }))];
-                } catch (e) {
-                    console.error(`Failed to fetch models for ${p}:`, e);
+                    if (p.toLowerCase() === 'ollama' && models.length > 0) set({ ollamaStatus: 'running' });
+                } catch (e: any) {
+                    // Suppress common error when a provider key is simply missing
+                    if (e && typeof e === 'string' && e.includes('API key not found')) {
+                        // Silent skip
+                    } else {
+                        console.error(`Failed to fetch models for ${p}:`, e);
+                    }
+                    if (p.toLowerCase() === 'ollama') set({ ollamaStatus: 'error' });
                 }
             }
-            set({ availableModels: allModels });
+            
+            set((state) => {
+                let currentModels = [...state.availableModels];
+                
+                if (targetProvider) {
+                    // Refreshing only ONE provider: remove its old models
+                    currentModels = currentModels.filter(m => m.provider !== targetProvider.toLowerCase());
+                } else {
+                    // Refreshing ALL: remove everything except Ollama if it was already running and not being refreshed
+                    // Actually, since practitioners often have many Ollama models, we should only keep them if they are still valid.
+                    // But for simplicity, if targetProvider is null (full refresh), we start fresh except for Ollama which we might want to preserve 
+                    // if it takes long to fetch. However, list_provider_models is fast.
+                    currentModels = []; 
+                }
+                
+                // Add newly fetched models, ensuring NO duplicates by ID
+                const newModels = allModels.filter(nm => !currentModels.some(cm => cm.id === nm.id && cm.provider === nm.provider));
+                
+                return { 
+                    availableModels: [...currentModels, ...newModels],
+                    lastRefresh: Date.now()
+                };
+            });
         } catch (e) {
             console.error('Refresh Available Models Error:', e);
         }
@@ -319,7 +430,142 @@ export const useStore = create<AppState>((set, get) => ({
     addMitmLog: (log) => set((state) => ({ 
         mitmLogs: [...state.mitmLogs, `[${new Date().toLocaleTimeString()}] ${log}`].slice(-100) 
     })),
+
+    registerMcpServer: async (name, command, args) => {
+        try {
+            await invoke('register_mcp_server', { name, command, args });
+            await get().listMcpServers();
+        } catch (e) {
+            console.error('Register MCP Server Error:', e);
+        }
+    },
+
+    listMcpServers: async () => {
+        try {
+            const servers = await invoke<string[]>('list_mcp_servers');
+            set({ mcpServers: servers });
+        } catch (e) {
+            console.error('List MCP Servers Error:', e);
+        }
+    },
+    addAgentMessage: (role, content) => set((state) => ({ 
+        agentMessages: [...state.agentMessages, { role, content, steps: role === 'assistant' ? [] : undefined }] 
+    })),
+    updateLastAgentMessage: (content) => set((state) => {
+        const messages = [...state.agentMessages];
+        const lastIndex = messages.length - 1;
+        const last = messages[lastIndex];
+        if (last && last.role === 'assistant') {
+            messages[lastIndex] = { ...last, content };
+        }
+        return { agentMessages: messages };
+    }),
+    addAgentStep: (name) => set((state) => {
+        const messages = [...state.agentMessages];
+        const last = messages[messages.length - 1];
+        if (last && last.role === 'assistant') {
+            last.steps = [...(last.steps || []), { name, status: 'running' }];
+        }
+        return { agentMessages: messages };
+    }),
+    updateAgentStepStatus: (name, status) => set((state) => {
+        const messages = [...state.agentMessages];
+        const last = messages[messages.length - 1];
+        if (last && last.role === 'assistant' && last.steps) {
+            const step = last.steps.find(s => s.name === name);
+            if (step) step.status = status;
+        }
+        return { agentMessages: messages };
+    }),
+    setIsAgentThinking: (isAgentThinking) => set({ isAgentThinking }),
+    addAgentFile: (path: string) => {
+        set((state) => {
+            const last = state.agentMessages[state.agentMessages.length - 1];
+            if (last && last.role === 'assistant') {
+                const files = last.files || [];
+                if (!files.includes(path)) {
+                    const newMessages = [...state.agentMessages];
+                    newMessages[newMessages.length - 1] = { ...last, files: [...files, path] };
+                    return { agentMessages: newMessages };
+                }
+            }
+            return state;
+        });
+    },
+    addAgentArtifact: (type, path) => {
+        set((state) => {
+            const last = state.agentMessages[state.agentMessages.length - 1];
+            if (last && last.role === 'assistant') {
+                const artifacts = last.artifacts || [];
+                if (!artifacts.find(a => a.path === path)) {
+                    const newMessages = [...state.agentMessages];
+                    newMessages[newMessages.length - 1] = { ...last, artifacts: [...artifacts, { type, path }] };
+                    return { agentMessages: newMessages };
+                }
+            }
+            return state;
+        });
+    },
+    clearAgentMessages: () => set({ agentMessages: [] }),
+    truncateAgentMessages: (index: number) => set((state) => ({ 
+        agentMessages: state.agentMessages.slice(0, index) 
+    })),
+    setCommandPaletteOpen: (isCommandPaletteOpen) => set({ isCommandPaletteOpen }),
+    setContextMenuOpen: (isContextMenuOpen, x = 0, y = 0) => set({ isContextMenuOpen, contextMenuPosition: { x, y } }),
+    setDebugToolbarOpen: (isDebugToolbarOpen) => set({ isDebugToolbarOpen }),
+    setCommandPaletteQuery: (commandPaletteQuery) => set({ commandPaletteQuery }),
+    toggleDirectory: async (path: string) => {
+        const state = get();
+        const node = findNodeRecursive(state.fileTree, path);
+        if (!node) return;
+
+        const is_now_expanded = !node.is_expanded;
+        
+        const updateExpansionRecursive = (nodes: FileEntry[]): FileEntry[] => {
+            return nodes.map(n => {
+                if (n.path === path) return { ...n, is_expanded: is_now_expanded };
+                if (n.children) return { ...n, children: updateExpansionRecursive(n.children) };
+                return n;
+            });
+        };
+
+        if (is_now_expanded && (!node.children || node.children.length === 0)) {
+            try {
+                const children = await invoke<FileEntry[]>('list_dir_flat', { path });
+                const treeWithChildren = injectChildrenRecursive(state.fileTree, path, children);
+                set({ fileTree: updateExpansionRecursive(treeWithChildren) });
+            } catch (e) {
+                console.error('Lazy load directory failed:', e);
+                set({ fileTree: updateExpansionRecursive(state.fileTree) });
+            }
+        } else {
+            set({ fileTree: updateExpansionRecursive(state.fileTree) });
+        }
+    },
 }));
+
+function findNodeRecursive(nodes: FileEntry[], path: string): FileEntry | null {
+    for (const node of nodes) {
+        if (node.path === path) return node;
+        if (node.children) {
+            const found = findNodeRecursive(node.children, path);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+function injectChildrenRecursive(nodes: FileEntry[], path: string, children: FileEntry[]): FileEntry[] {
+    return nodes.map(node => {
+        if (node.path === path) {
+            return { ...node, children };
+        }
+        if (node.children) {
+            return { ...node, children: injectChildrenRecursive(node.children, path, children) };
+        }
+        return node;
+    });
+}
 
 if (typeof window !== 'undefined') {
     (window as any).useStore = useStore;

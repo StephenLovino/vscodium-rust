@@ -69,6 +69,9 @@ const Workbench: React.FC = () => {
 
     const hasOpenFile = activeTabId !== null && tabs.length > 0;
 
+    const activeRoot = useStore(state => state.activeRoot);
+    const activeRootName = useStore(state => state.activeRootName);
+
     return (
         <div id="workbench">
             <ActivityBar />
@@ -108,7 +111,7 @@ const Workbench: React.FC = () => {
                                         />
                                     </div>
                                 ))}
-                                {tabs.length === 0 && (
+                                {tabs.length === 0 && !activeRoot && (
                                     <div className="tab active" style={{ display: 'flex', alignItems: 'center' }}>
                                         <i className="codicon codicon-markdown" style={{ marginRight: '6px', fontSize: '14px', color: '#1f9ceb' }} />
                                         Welcome
@@ -122,7 +125,7 @@ const Workbench: React.FC = () => {
                                 {hasOpenFile ? (
                                     <>
                                         <i className="codicon codicon-folder" style={{ fontSize: '14px', marginRight: '4px', opacity: 0.6 }} />
-                                        <span className="breadcrumb-item" style={{ cursor: 'pointer' }}>{(tabs.find(t => t.id === activeTabId)?.path.split('/').slice(-2, -1)[0]) ?? ((window as any).activeRootName || 'vscodium-rust')}</span>
+                                        <span className="breadcrumb-item" style={{ cursor: 'pointer' }}>{(tabs.find(t => t.id === activeTabId)?.path.split('/').slice(-2, -1)[0]) ?? (activeRootName || 'vscodium-rust')}</span>
                                         <i className="codicon codicon-chevron-right" style={{ fontSize: '12px', margin: '0 4px', opacity: 0.4 }} />
                                         <i className={`codicon codicon-${detectLanguageIcon(tabs.find(t => t.id === activeTabId)?.filename || '')}`} style={{ fontSize: '14px', marginRight: '4px', opacity: 0.6 }} />
                                         <span className="breadcrumb-item active" style={{ color: 'var(--vscode-tab-activeForeground)', fontWeight: 400 }}>
@@ -132,7 +135,7 @@ const Workbench: React.FC = () => {
                                 ) : (
                                     <>
                                         <i className="codicon codicon-folder" style={{ fontSize: '14px', marginRight: '4px', opacity: 0.6 }} />
-                                        <span className="breadcrumb-item">{(window as any).activeRootName || 'vscodium-rust'}</span>
+                                        <span className="breadcrumb-item">{activeRootName || 'vscodium-rust'}</span>
                                         <i className="codicon codicon-chevron-right" style={{ fontSize: '12px', margin: '0 4px', opacity: 0.4 }} />
                                         <span className="breadcrumb-item active" style={{ color: 'var(--vscode-tab-activeForeground)' }}>Welcome</span>
                                     </>
@@ -140,8 +143,8 @@ const Workbench: React.FC = () => {
                             </div>
 
                             <div className="editor-wrapper" style={{ position: 'relative', width: '100%', height: '100%', flex: 1 }}>
-                                {/* Welcome screen when no file is open */}
-                                {!hasOpenFile && (
+                                {/* Welcome screen when no root is open and no tabs */}
+                                {!activeRoot && tabs.length === 0 && (
                                     <div id="welcome-view" className="welcome-view" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', background: 'var(--vscode-editor-background)', color: 'var(--vscode-sideBar-foreground)' }}>
                                         <div className="welcome-logo" style={{ marginBottom: '24px', opacity: 0.8 }}>
                                             <svg width="120" height="120" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">

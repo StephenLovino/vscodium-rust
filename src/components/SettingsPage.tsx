@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '../tauri_bridge';
 import { useStore } from '../store';
+import McpManager from './McpManager';
 
 interface Settings {
     theme: string;
@@ -12,6 +13,9 @@ interface Settings {
 const SettingsPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'user' | 'workspace' | 'antigravity'>('user');
     const setTheme = useStore(state => state.setTheme);
+    const ollamaStatus = useStore(state => state.ollamaStatus);
+    const refreshAvailableModels = useStore(state => state.refreshAvailableModels);
+    
     const [settings, setSettings] = useState<Settings>({
         theme: 'vs-dark',
         font_size: 14,
@@ -58,6 +62,36 @@ const SettingsPage: React.FC = () => {
         </div>
     );
 
+    const renderAntigravitySettings = () => (
+        <div className="antigravity-settings">
+            <div className="settings-section">
+                <div className="settings-section-title">AI Engine</div>
+                {renderSettingItem(
+                    "Ollama Status",
+                    "Status of the local Ollama instance.",
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ 
+                            width: '10px', 
+                            height: '10px', 
+                            borderRadius: '50%', 
+                            background: ollamaStatus === 'running' ? '#4ade80' : '#f87171' 
+                        }}></div>
+                        <span>{ollamaStatus === 'running' ? 'Connected' : 'Disconnected'}</span>
+                        <button 
+                            className="secondary-button" 
+                            style={{ marginLeft: '12px', padding: '4px 8px', fontSize: '11px' }}
+                            onClick={() => refreshAvailableModels('ollama')}
+                        >
+                            Reconnect
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            <McpManager />
+        </div>
+    );
+
     return (
         <div className="settings-container">
             <div className="settings-header">
@@ -81,58 +115,62 @@ const SettingsPage: React.FC = () => {
             </div>
 
             <div className="settings-content">
-                <div className="settings-section">
-                    <div className="settings-section-title">Commonly Used</div>
-                    
-                    {renderSettingItem(
-                        "Files: Auto Save",
-                        "Controls auto save of editors that have unsaved changes.",
-                        <select 
-                            value={settings.auto_save || 'off'} 
-                            onChange={(e) => handleSettingChange('auto_save', e.target.value)}
-                        >
-                            <option value="off">off</option>
-                            <option value="afterDelay">afterDelay</option>
-                            <option value="onFocusChange">onFocusChange</option>
-                            <option value="onWindowChange">onWindowChange</option>
-                        </select>
-                    )}
+                {activeTab === 'antigravity' ? (
+                    renderAntigravitySettings()
+                ) : (
+                    <div className="settings-section">
+                        <div className="settings-section-title">Commonly Used</div>
+                        
+                        {renderSettingItem(
+                            "Files: Auto Save",
+                            "Controls auto save of editors that have unsaved changes.",
+                            <select 
+                                value={settings.auto_save || 'off'} 
+                                onChange={(e) => handleSettingChange('auto_save', e.target.value)}
+                            >
+                                <option value="off">off</option>
+                                <option value="afterDelay">afterDelay</option>
+                                <option value="onFocusChange">onFocusChange</option>
+                                <option value="onWindowChange">onWindowChange</option>
+                            </select>
+                        )}
 
-                    {renderSettingItem(
-                        "Editor: Font Size",
-                        "Controls the font size in pixels.",
-                        <input 
-                            type="number" 
-                            value={settings.font_size} 
-                            onChange={(e) => handleSettingChange('font_size', parseInt(e.target.value))}
-                        />
-                    )}
+                        {renderSettingItem(
+                            "Editor: Font Size",
+                            "Controls the font size in pixels.",
+                            <input 
+                                type="number" 
+                                value={settings.font_size} 
+                                onChange={(e) => handleSettingChange('font_size', parseInt(e.target.value))}
+                            />
+                        )}
 
-                    {renderSettingItem(
-                        "Editor: Tab Size",
-                        "The number of spaces a tab is equal to.",
-                        <input 
-                            type="number" 
-                            value={settings.tab_size || 4} 
-                            onChange={(e) => handleSettingChange('tab_size', parseInt(e.target.value))}
-                        />
-                    )}
+                        {renderSettingItem(
+                            "Editor: Tab Size",
+                            "The number of spaces a tab is equal to.",
+                            <input 
+                                type="number" 
+                                value={settings.tab_size || 4} 
+                                onChange={(e) => handleSettingChange('tab_size', parseInt(e.target.value))}
+                            />
+                        )}
 
-                    {renderSettingItem(
-                        "Workbench: Color Theme",
-                        "Specifies the color theme used in the workbench.",
-                        <select 
-                            value={settings.theme} 
-                            onChange={(e) => handleSettingChange('theme', e.target.value)}
-                        >
-                            <option value="vs-dark">Dark (Visual Studio)</option>
-                            <option value="vs">Light (Visual Studio)</option>
-                            <option value="Darcula">Darcula</option>
-                            <option value="Monokai">Monokai</option>
-                            <option value="Solarized Dark">Solarized Dark</option>
-                        </select>
-                    )}
-                </div>
+                        {renderSettingItem(
+                            "Workbench: Color Theme",
+                            "Specifies the color theme used in the workbench.",
+                            <select 
+                                value={settings.theme} 
+                                onChange={(e) => handleSettingChange('theme', e.target.value)}
+                            >
+                                <option value="vs-dark">Dark (Visual Studio)</option>
+                                <option value="vs">Light (Visual Studio)</option>
+                                <option value="Darcula">Darcula</option>
+                                <option value="Monokai">Monokai</option>
+                                <option value="Solarized Dark">Solarized Dark</option>
+                            </select>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );

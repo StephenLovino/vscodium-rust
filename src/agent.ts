@@ -8,23 +8,7 @@ export interface ChatMessage {
 
 let chatHistory: ChatMessage[] = [];
 
-const providerModels: Record<string, string[]> = {
-    "OpenAI": ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
-    "Anthropic": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229"],
-    "Google": [
-        "gemini-1.5-pro",
-        "gemini-1.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-2.0-pro-exp-02-05",
-        "gemini-2.0-flash-thinking-exp-01-21"
-    ],
-    "Groq": ["llama3-8b-8192", "mixtral-8x7b-32768", "llama3-70b-8192"],
-    "OpenRouter": ["anthropic/claude-3.5-sonnet", "meta-llama/llama-3-70b-instruct"],
-    "xAI": ["grok-beta"],
-    "Cerebras": ["llama3.1-8b", "llama3.1-70b"],
-    "Alibaba": ["qwen3.5-plus", "qwen2.5-72b-instruct"]
-};
+// providerModels is now managed by the store and backend discovery
 
 let currentAgentProvider = "Google";
 let currentAgentModel = "gemini-2.5-pro";
@@ -104,7 +88,8 @@ export function openModeDropdown(element: HTMLElement, onSelect: (label: string)
     createPopover(rect.left, rect.top, [
         { label: "Planning", value: "Planning", desc: "Agent can plan before executing tasks. Use for deep research, complex tasks, or collaborative work" },
         { label: "Planning (Source Control)", value: "Planning (Source Control)", desc: "Deep dive into git history and planning source control workflows" },
-        { label: "Fast", value: "Fast", desc: "Agent will execute tasks directly. Use for simple tasks that can be completed faster" }
+        { label: "Fast", value: "Fast", desc: "Agent will execute tasks directly. Use for simple tasks that can be completed faster" },
+        { label: "Cybersecurity", value: "Cybersecurity", desc: "Unrestricted mode for exploit research, reverse engineering, and offensive programming." }
     ], (val) => {
         const store = (window as any).useStore;
         if (store) {
@@ -117,8 +102,48 @@ export function openModeDropdown(element: HTMLElement, onSelect: (label: string)
     });
 }
 
-export function setupAgentUI() {
-    // Legacy setup for non-react parts if any, but we'll mainly use exports now
+export async function initAgent() {
+    console.log("Initializing Agent global listeners...");
+    const { listen } = await import('@tauri-apps/api/event');
+    
+    listen('session-captured', (event: any) => {
+        const { provider, cookies, userAgent } = event.payload;
+        console.log(`Session captured for ${provider}`);
+        
+        const session = {
+            provider,
+            cookies,
+            user_agent: userAgent
+        };
+
+        invoke("save_ai_session", { session }).then(() => {
+            const store = (window as any).useStore;
+            if (store) {
+                store.getState().setAiStatus('alive');
+                store.getState().refreshAvailableModels(provider);
+                
+                // Visual feedback
+                const messagesContainer = document.getElementById("agent-messages");
+                if (messagesContainer) {
+                    const info = document.createElement("div");
+                    info.className = "agent-message info-message-box";
+                    info.style.background = "rgba(16, 185, 129, 0.1)";
+                    info.style.border = "1px solid rgba(16, 185, 129, 0.2)";
+                    info.style.color = "#10b981";
+                    info.style.padding = "8px 12px";
+                    info.style.margin = "8px 0";
+                    info.style.borderRadius = "6px";
+                    info.style.fontSize = "12px";
+                    info.style.animation = "fadeIn 0.3s ease";
+                    info.innerHTML = `<i class="codicon codicon-pass-filled"></i> Session for ${provider} synced successfully!`;
+                    messagesContainer.appendChild(info);
+                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                }
+            }
+        }).catch(err => {
+            console.error("Failed to save AI session:", err);
+        });
+    });
 }
 
 export function openModelDropdown(element: HTMLElement, onSelect: (label: string) => void) {
@@ -131,12 +156,18 @@ export function openModelDropdown(element: HTMLElement, onSelect: (label: string
 
     if (availableModels && availableModels.length > 0) {
         availableModels.forEach((m: { id: string, provider: string }) => {
-            const providerCapitalized = m.provider.charAt(0).toUpperCase() + m.provider.slice(1);
+            const providerName = m.provider.toLowerCase();
+            const providerLabel = providerName.charAt(0).toUpperCase() + providerName.slice(1);
             items.push({
-                label: `${m.id} (${providerCapitalized})`,
-                value: `${providerCapitalized}|${m.id}`
+                label: `${m.id} (${providerLabel})`,
+                value: `${providerLabel}|${m.id}`
             });
         });
+    }
+
+    // Add local Ollama manual check if no models found (fallback)
+    if (!items.find(i => i.value.startsWith("Ollama"))) {
+        items.push({ label: "🛠️ Check Ollama (Local)", value: "action|check_ollama", desc: "Scan for local models on http://localhost:11434" });
     }
 
     // Always offer Hunting/Settings if list is low or empty
@@ -169,11 +200,18 @@ export function openModelDropdown(element: HTMLElement, onSelect: (label: string
             startKeyHunt();
             return;
         }
-        if (val.startsWith("action|login|")) {
-            const provider = val.split("|")[2];
-            invoke("open_ai_login", { provider });
+        if (val === "action|check_ollama") {
+            const store = (window as any).useStore;
+            if (store) store.getState().refreshAvailableModels("ollama");
             return;
         }
+    if (val.startsWith("action|login|")) {
+        const provider = val.split("|")[2];
+        invoke("open_ai_login", { provider }).catch(err => {
+            console.error("Failed to open login window:", err);
+        });
+        return;
+    }
         if (val === "action|settings") {
             // Trigger settings sidebar or view - assuming there's a global way or just open it
             const settingsBtn = document.querySelector('.codicon-settings') as HTMLElement;
@@ -297,7 +335,7 @@ export async function handleAgentChat(inputElement: HTMLTextAreaElement) {
                 clearInterval(timerInterval);
                 msgContent.innerText = msg;
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }, assistantBox);
+            });
         } catch (err: any) {
             clearInterval(timerInterval);
             msgContent.innerHTML = `<div style="color: #f87171; background: rgba(248, 113, 113, 0.1); padding: 12px; border-radius: 6px; border: 1px solid rgba(248, 113, 113, 0.2);">
@@ -310,53 +348,124 @@ export async function handleAgentChat(inputElement: HTMLTextAreaElement) {
     }
 }
 
-export async function sendAgentMessage(userPrompt: string, onUpdate: (msg: string) => void, assistantMsg?: HTMLElement): Promise<void> {
-    const { agentModel, agentMode, setAiStatus } = (window as any).useStore.getState();
-    const [provider, model] = agentModel.includes("|") ? agentModel.split("|") : ["Google", "gemini-2.5-pro"];
+export async function sendAgentMessage(userPrompt: string, _onUpdate: (msg: string) => void): Promise<void> {
+    const store = (window as any).useStore;
+    if (!store) throw new Error("Store not found");
+
+    // Handle Slash Commands
+    if (userPrompt.startsWith('/')) {
+        const handled = await processSlashCommand(userPrompt);
+        if (handled) return;
+    }
     
+    const { agentModel, agentMessages, setAiStatus, availableModels } = store.getState();
+    
+    // Determine provider and model
+    let provider = "OpenAI";
+    let model = agentModel;
+
+    // 1. Try to find in availableModels list (most reliable)
+    const found = availableModels?.find((m: any) => m.id === agentModel || `${m.provider}|${m.id}` === agentModel);
+    if (found) {
+        provider = found.provider;
+        model = found.id;
+    } 
+    // 2. Fallback to format parsing etc.
+    else if (agentModel.includes("|")) {
+        [provider, model] = agentModel.split("|");
+    } else if (agentModel.toLowerCase().includes("goog") || agentModel.toLowerCase().includes("gemini")) {
+        provider = "Google";
+    } else if (agentModel.toLowerCase().includes("anthropic") || agentModel.toLowerCase().includes("claude")) {
+        provider = "Anthropic";
+    } else if (agentModel.toLowerCase().includes("ollama") || agentModel.includes("/") || agentModel.includes(":")) {
+        // Deep local model detection (Ollama often uses slashes and colons)
+        provider = "Ollama";
+    }
+
+    // Normalized provider for backend
+    const normalizedProvider = provider.toLowerCase() === 'apiradar' ? 'apiradar' : provider.toLowerCase();
+
+    // Map messages to the format expected by the backend
+    const messages = agentMessages.map((m: any) => ({
+        role: m.role,
+        content: m.content || "",
+        tool_calls: null,
+        metadata: null
+    }));
+
     setAiStatus('alive');
 
-    const unlistenContent = await listen("ai-content", (event: any) => {
-        onUpdate(event.payload.content);
-    });
-
-    const unlistenToolCall = await listen("ai-tool-call", (event: any) => {
-        const progress = assistantMsg?.querySelector('.progress-stepper');
-        if (progress) {
-            const step = document.createElement("div");
-            step.className = "progress-step";
-            step.innerHTML = `<div class="step-number" style="background: #3b82f6;">🛠️</div><div class="step-content">Calling tool: <b>${event.payload.name}</b></div>`;
-            progress.appendChild(step);
-        }
-    });
-
-    const unlistenToolResult = await listen("ai-tool-result", (event: any) => {
-        const progress = assistantMsg?.querySelector('.progress-stepper');
-        if (progress) {
-            const lastStep = progress.lastElementChild;
-            if (lastStep) {
-                const content = lastStep.querySelector('.step-content');
-                if (content) content.innerHTML += ` <span style="color: #10b981;">(Success)</span>`;
-            }
-        }
-    });
-
     try {
-        const response = await invoke<string>("ai_chat", {
-            prompt: userPrompt,
-            provider: provider,
-            model: model
+        await invoke<string>("ai_chat", {
+            request: {
+                provider: normalizedProvider,
+                model: model,
+                messages: messages,
+                temperature: 0.7,
+                autonomous: true,
+                cyber_mode: store.getState().cyberMode,
+                ollama_url: store.getState().ollamaUrl
+            }
         });
-        
-        onUpdate(response);
     } catch (e: any) {
         console.error("Agent chat failed:", e);
         setAiStatus('dead');
-        onUpdate(`Error: ${e}`);
-    } finally {
-        unlistenContent();
-        unlistenToolCall();
-        unlistenToolResult();
+        throw e;
+    }
+}
+
+async function processSlashCommand(prompt: string): Promise<boolean> {
+    const command = prompt.split(' ')[0].toLowerCase();
+    const store = (window as any).useStore;
+    if (!store) return false;
+
+    const { addAgentMessage, clearAgentMessages, activeRoot } = store.getState();
+
+    switch (command) {
+        case '/clear':
+            clearAgentMessages();
+            return true;
+        case '/settings':
+            // Logic handled by UI usually, but we can force it
+            const settingsBtn = document.querySelector('.codicon-settings-gear') as HTMLElement;
+            if (settingsBtn) settingsBtn.click();
+            return true;
+        case '/workflows':
+            addAgentMessage('assistant', "Searching for available workflows...");
+            if (!activeRoot) {
+                store.getState().updateLastAgentMessage("Error: No active root directory found.");
+                return true;
+            }
+            try {
+                const paths = [`${activeRoot}/.agent/workflows`, `${activeRoot}/.agents/workflows`];
+                let allWfs: any[] = [];
+                for (const p of paths) {
+                    try {
+                        const entries = await invoke<any[]>("list_directory", { path: p });
+                        allWfs = [...allWfs, ...entries.filter(e => !e.is_dir && e.name.endsWith('.md'))];
+                    } catch (e) {}
+                }
+                
+                if (allWfs.length === 0) {
+                    store.getState().updateLastAgentMessage("No workflows found in `.agent/workflows` or `.agents/workflows`.");
+                } else {
+                    const list = allWfs.map(w => `- [${w.name}](file://${w.path})`).join('\n');
+                    store.getState().updateLastAgentMessage(`### Available Workflows:\n${list}\n\nClick a workflow or type its name to execute.`);
+                }
+            } catch (err: any) {
+                store.getState().updateLastAgentMessage(`Error listing workflows: ${err.message}`);
+            }
+            return true;
+        case '/help':
+            const helpMsg = `### Antigravity Slash Commands:
+- \`/clear\`: Wipe current chat history.
+- \`/settings\`: Toggle the AI configuration panel.
+- \`/workflows\`: List all automated workflows in your project.
+- \`/help\`: Show this list.`;
+            addAgentMessage('assistant', helpMsg);
+            return true;
+        default:
+            return false; // Not a handled slash command
     }
 }
 
@@ -503,18 +612,49 @@ export async function startKeyHunt() {
         unlistenFound();
 
         if (results.length > 0) {
-            title.innerHTML = `<i class="codicon codicon-check" style="color: #4ade80;"></i> Hunt Complete - ${results.length} Keys Found!`;
-            addLog(`<br><b style="color: #4ade80;">Refreshed model list with discovered keys.</b>`);
-            const store = (window as any).useStore;
-            if (store) store.getState().refreshAvailableModels();
+            title.innerHTML = `<i class="codicon codicon-check" style="color: #4ade80;"></i> Hunt Complete - ${results.length} Live Keys Found!`;
+            addLog(`<br><b style="color: #4ade80;">✅ Injected ${results.length} live key(s) into your environment.</b>`);
+            for (const r of results) {
+                addLog(`<span style="color: #4ade80;">  → ${r.type} from ${r.repo}</span>`);
+            }
         } else {
             title.innerHTML = `<i class="codicon codicon-info"></i> Hunt Complete - No new keys.`;
-            addLog(`<br>Try again later for fresh vectors.`);
+            addLog(`<br>All discovered keys were dead or revoked. Try again later for fresh vectors.`);
+        }
+        // ALWAYS refresh models after hunt — picks up any newly injected keys
+        const store = (window as any).useStore;
+        if (store) {
+            addLog(`<br><span style="opacity:0.6">Refreshing model list...</span>`);
+            await store.getState().refreshAvailableModels();
+            const models = store.getState().availableModels;
+            if (models.length > 0) {
+                addLog(`<b style="color: #60a5fa;">Found ${models.length} available model(s). Ready to chat!</b>`);
+                // Auto-select the first model if none selected
+                if (!store.getState().agentModel) {
+                    const first = models[0];
+                    const providerLabel = first.provider.charAt(0).toUpperCase() + first.provider.slice(1);
+                    const formattedId = `${providerLabel}|${first.id}`;
+                    store.getState().setAgentModel(formattedId);
+                    addLog(`<span style="opacity:0.6">Auto-selected <b>${first.id}</b></span>`);
+                }
+            } else {
+                addLog(`<span style="color: #f87171;">No models available. Even with keys, listing failed. Check your internet or keys.</span>`);
+            }
         }
     } catch (err: any) {
         unlistenProgress();
         unlistenFound();
-        addLog(`<br><span style="color: #f87171;">Error during hunt: ${err}</span>`);
+        const addLog = (msg: string) => {
+            const logContent = document.getElementById("hunt-log-content");
+            if (logContent) {
+                const line = document.createElement("div");
+                line.innerHTML = msg.replace(/\n/g, "<br>");
+                logContent.appendChild(line);
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+        };
+        addLog(`<br><span style="color: #f87171;">Error during hunt: ${err.message || err}</span>`);
+        console.error("Hunt error:", err);
     }
 }
 

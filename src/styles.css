@@ -1739,6 +1739,50 @@ body {
     border-left: 2px solid #60a5fa;
 }
 
+/* MCP Manager Styles */
+.mcp-manager {
+    margin-top: 24px;
+    border-top: 1px solid var(--vscode-panel-border);
+    padding-top: 24px;
+}
+
+.mcp-server-item {
+    transition: transform 0.2s, background 0.2s;
+}
+
+.mcp-server-item:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+    transform: translateX(4px);
+}
+
+.add-mcp-form input {
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-panel-border);
+    color: var(--vscode-input-foreground);
+    padding: 8px;
+    border-radius: 4px;
+    width: 100%;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.add-mcp-form input:focus {
+    border-color: var(--vscode-focusBorder);
+}
+
+.secondary-button {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.secondary-button:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
 .progress-stepper {
     display: flex;
     flex-direction: column;

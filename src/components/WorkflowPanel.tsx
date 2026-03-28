@@ -11,9 +11,17 @@ const WorkflowPanel: React.FC = () => {
         if (!activeRoot) return;
         setLoading(true);
         try {
-            const workflowDir = `${activeRoot}/.agent/workflows`;
-            const entries = await invoke<FileEntry[]>('list_directory', { path: workflowDir });
-            setWorkflows(entries.filter(e => !e.is_dir && e.name.endsWith('.md')));
+            const paths = [`${activeRoot}/.agent/workflows`, `${activeRoot}/.agents/workflows`];
+            let allWfs: FileEntry[] = [];
+            for (const p of paths) {
+                try {
+                    const entries = await invoke<FileEntry[]>('list_directory', { path: p });
+                    allWfs = [...allWfs, ...entries.filter(e => !e.is_dir && e.name.endsWith('.md'))];
+                } catch (e) {}
+            }
+            // Remove duplicates by path
+            const uniqueWfs = Array.from(new Map(allWfs.map(item => [item.path, item])).values());
+            setWorkflows(uniqueWfs);
         } catch (e) {
             console.error("Failed to load workflows:", e);
         } finally {
@@ -85,7 +93,26 @@ const WorkflowPanel: React.FC = () => {
             )}
 
             <div style={{ marginTop: 'auto', padding: '12px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#60a5fa', marginBottom: '4px' }}>Autonomous Execution</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#60a5fa' }}>Autonomous Execution</div>
+                    <div 
+                        onClick={() => {
+                            const store = (window as any).useStore;
+                            if (store) store.getState().setCyberMode(!store.getState().cyberMode);
+                        }}
+                        style={{ 
+                            fontSize: '10px', 
+                            padding: '2px 8px', 
+                            borderRadius: '10px', 
+                            background: 'rgba(59, 130, 246, 0.2)', 
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                            color: '#60a5fa',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        TURBO OFF
+                    </div>
+                </div>
                 <div style={{ fontSize: '11px', opacity: 0.8, lineHeight: '1.4' }}>
                     Clicking a workflow triggers the Antigravity Agent to autonomous evaluate and execute the steps defined in the workflow file.
                 </div>

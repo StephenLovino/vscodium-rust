@@ -1,6 +1,7 @@
 import { useStore } from './store';
+import { invoke } from './tauri_bridge';
 
-type Command = {
+export type Command = {
     id: string;
     label: string;
     run: () => void;
@@ -10,7 +11,6 @@ let commands: Command[] = [];
 let paletteInitialized = false;
 
 function getStore(): any {
-    // Zustand store can be accessed outside React via getState()
     return (useStore as any).getState();
 }
 
@@ -58,117 +58,91 @@ function registerCoreCommands() {
             label: 'View: Show Command Palette',
             run: () => openCommandPalette(),
         },
+        {
+            id: 'explorer.openFolder',
+            label: 'File: Open Folder...',
+            run: async () => {
+                const result = await invoke<string | null>('open_folder');
+                if (result) {
+                    store.setActiveRoot(result);
+                    await store.refreshFileTree();
+                }
+            },
+        },
+        {
+            id: 'workbench.action.showWelcome',
+            label: 'Help: Welcome',
+            run: () => store.showWelcomeTab(),
+        },
+        {
+            id: 'explorer.newFile',
+            label: 'File: New File...',
+            run: () => {
+                const path = store.activeRoot;
+                if (!path) return;
+                invoke('create_file', { path: `${path}/new_file.txt` }).then(() => store.refreshFileTree());
+            },
+        },
+        {
+            id: 'explorer.newFolder',
+            label: 'File: New Folder...',
+            run: () => {
+                // Fixed implementation placeholder
+            },
+        },
+        {
+            id: 'git.clone',
+            label: 'Git: Clone Repository...',
+            run: () => {
+                // Implementation for git clone
+            },
+        },
     ];
+    
+    // Expose the command registry so the React CommandPalette component can access it
+    (window as any).commandRegistry = commands;
 }
 
-function openCommandPalette() {
-    const palette = document.getElementById('command-palette');
-    const input = document.getElementById('command-input') as HTMLInputElement | null;
-    const list = document.getElementById('command-list');
-    if (!palette || !input || !list) return;
-
-    palette.classList.remove('hidden');
-    input.value = '';
-    renderCommandList(commands, list, 0);
-    input.focus();
-
-    let selectedIndex = 0;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-            e.stopPropagation();
-            palette.classList.add('hidden');
-            document.removeEventListener('keydown', onKeyDown);
-            return;
-        }
-        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-            e.preventDefault();
-            const delta = e.key === 'ArrowDown' ? 1 : -1;
-            selectedIndex = (selectedIndex + delta + commands.length) % commands.length;
-            renderCommandList(commands, list, selectedIndex);
-            return;
-        }
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            const cmd = commands[selectedIndex];
-            if (cmd) {
-                palette.classList.add('hidden');
-                document.removeEventListener('keydown', onKeyDown);
-                cmd.run();
-            }
-        }
-    };
-
-    const onInput = () => {
-        const text = input.value.toLowerCase();
-        const filtered = commands.filter(c => c.label.toLowerCase().includes(text));
-        selectedIndex = 0;
-        renderCommandList(filtered, list, selectedIndex);
-        commands = filtered.length > 0 ? filtered : commands;
-    };
-
-    input.oninput = onInput;
-    document.addEventListener('keydown', onKeyDown);
-}
-
-function renderCommandList(cmds: Command[], container: HTMLElement, selectedIndex: number) {
-    container.innerHTML = '';
-    cmds.forEach((cmd, idx) => {
-        const div = document.createElement('div');
-        div.className = 'command-item';
-        div.style.padding = '4px 10px';
-        div.style.fontSize = '13px';
-        div.style.cursor = 'pointer';
-        if (idx === selectedIndex) {
-            div.style.backgroundColor = 'var(--vscode-list-activeSelectionBackground)';
-            div.style.color = 'var(--vscode-list-activeSelectionForeground)';
-        }
-        div.innerText = cmd.label;
-        div.onclick = () => cmd.run();
-        container.appendChild(div);
-    });
+export function openCommandPalette() {
+    const store = getStore();
+    store.setCommandPaletteOpen(true);
+    store.setCommandPaletteQuery('');
 }
 
 function handleGlobalKeydown(e: KeyboardEvent) {
     const isMac = navigator.platform.toLowerCase().includes('mac');
     const cmd = isMac ? e.metaKey : e.ctrlKey;
 
-    // Cmd/Ctrl+Shift+P → Command Palette
     if (cmd && e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         openCommandPalette();
         return;
     }
 
-    // Cmd/Ctrl+P → quick open placeholder (reuse command palette for now)
     if (cmd && !e.shiftKey && e.key.toLowerCase() === 'p') {
         e.preventDefault();
         openCommandPalette();
         return;
     }
 
-    // Cmd/Ctrl+B → toggle sidebar
     if (cmd && !e.shiftKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         getStore().toggleSidebar();
         return;
     }
 
-    // Cmd/Ctrl+Alt+B → toggle right sidebar (Auxiliary Bar)
     if (cmd && e.altKey && !e.shiftKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
         getStore().toggleRightSidebar();
         return;
     }
 
-    // Cmd/Ctrl+J → toggle panel
     if (cmd && !e.shiftKey && e.key.toLowerCase() === 'j') {
         e.preventDefault();
         getStore().toggleBottomPanel();
         return;
     }
 
-    // Cmd/Ctrl+W → close active editor
     if (cmd && !e.shiftKey && e.key.toLowerCase() === 'w') {
         e.preventDefault();
         const { activeTabId, closeTab } = getStore();
@@ -181,10 +155,12 @@ export function initCommands() {
     if (paletteInitialized) return;
     registerCoreCommands();
 
-    // Expose to title bar click
     (window as any).showCommandPalette = () => openCommandPalette();
+    (window as any).executeCommand = (id: string) => {
+        const cmd = commands.find(c => c.id === id);
+        if (cmd) cmd.run();
+    };
 
     document.addEventListener('keydown', handleGlobalKeydown);
     paletteInitialized = true;
 }
-
