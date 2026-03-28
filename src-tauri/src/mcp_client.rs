@@ -6,6 +6,7 @@ use anyhow::{Result, anyhow, Context};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
+use reqwest::Client as HttpClient;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRpcRequest {
@@ -30,10 +31,19 @@ pub struct JsonRpcError {
     pub data: Option<Value>,
 }
 
+pub enum McpTransport {
+    Stdio {
+        child: Child,
+        writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    },
+    Http {
+        client: HttpClient,
+        url: String,
+    },
+}
+
 pub struct McpClient {
-    #[allow(dead_code)]
-    child: Child,
-    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    transport: McpTransport,
     pending_requests: Arc<Mutex<HashMap<String, oneshot::Sender<Result<Value>>>>>,
 }
 
@@ -51,8 +61,10 @@ impl McpClient {
         let stdout = child.stdout.take().ok_or_else(|| anyhow!("Failed to open stdout"))?;
         
         let client = Arc::new(Self {
-            child,
-            writer: Arc::new(Mutex::new(Box::new(stdin))),
+            transport: McpTransport::Stdio {
+                child,
+                writer: Arc::new(Mutex::new(Box::new(stdin))),
+            },
             pending_requests: Arc::new(Mutex::new(HashMap::new())),
         });
 
@@ -87,6 +99,17 @@ impl McpClient {
         Ok(client)
     }
 
+    pub fn connect_http(url: String) -> Result<Arc<Self>> {
+        let client = Arc::new(Self {
+            transport: McpTransport::Http {
+                client: HttpClient::new(),
+                url,
+            },
+            pending_requests: Arc::new(Mutex::new(HashMap::new())),
+        });
+        Ok(client)
+    }
+
     pub async fn call(&self, method: &str, params: Value) -> Result<Value> {
         let id = uuid::Uuid::new_v4().to_string();
         let request = JsonRpcRequest {
@@ -96,20 +119,37 @@ impl McpClient {
             id: Value::String(id.clone()),
         };
 
-        let json = serde_json::to_string(&request)? + "\n";
-        
-        let (tx, rx) = oneshot::channel();
-        {
-            let mut pending = self.pending_requests.lock().unwrap();
-            pending.insert(id, tx);
-        }
+        match &self.transport {
+            McpTransport::Stdio { writer, .. } => {
+                let json = serde_json::to_string(&request)? + "\n";
+                let (tx, rx) = oneshot::channel();
+                {
+                    let mut pending = self.pending_requests.lock().unwrap();
+                    pending.insert(id, tx);
+                }
 
-        {
-            let mut writer = self.writer.lock().unwrap();
-            writer.write_all(json.as_bytes())?;
-            writer.flush()?;
-        }
+                {
+                    let mut writer = writer.lock().unwrap();
+                    writer.write_all(json.as_bytes())?;
+                    writer.flush()?;
+                }
 
-        rx.await.map_err(|e| anyhow!("Oneshot error: {}", e))?
+                rx.await.map_err(|e| anyhow!("Oneshot error: {}", e))?
+            }
+            McpTransport::Http { client, url } => {
+                let response = client.post(url)
+                    .json(&request)
+                    .send()
+                    .await?
+                    .json::<JsonRpcResponse>()
+                    .await?;
+
+                if let Some(error) = response.error {
+                    Err(anyhow!(error.message))
+                } else {
+                    Ok(response.result.unwrap_or(Value::Null))
+                }
+            }
+        }
     }
 }

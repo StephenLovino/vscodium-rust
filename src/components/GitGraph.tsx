@@ -328,7 +328,7 @@ const GitGraph: React.FC = () => {
     return (
         <div ref={containerRef} style={{
             display: 'flex', flexDirection: 'column', height: '100%',
-            background: '#1a1a2e', position: 'relative', overflow: 'hidden'
+            background: 'var(--vscode-editor-background)', position: 'relative', overflow: 'hidden'
         }}>
             {/* ── Canvas toolbar ── */}
             <div style={{
@@ -388,7 +388,7 @@ const GitGraph: React.FC = () => {
                 {/* Background grid */}
                 <defs>
                     <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                        <circle cx="20" cy="20" r="0.5" fill="rgba(255,255,255,0.06)" />
+                        <circle cx="20" cy="20" r="0.5" fill="var(--vscode-editorGroup-border, rgba(255,255,255,0.06))" />
                     </pattern>
                     {/* Glow filter */}
                     <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
@@ -470,7 +470,7 @@ const GitGraph: React.FC = () => {
 
                                 {/* Node body */}
                                 <circle cx={node.x} cy={node.y} r={r}
-                                    fill={isSelected ? node.color : '#252540'}
+                                    fill={isSelected ? node.color : 'var(--vscode-editor-background)'}
                                     stroke={node.color}
                                     strokeWidth={isSelected ? 3 : 2}
                                     opacity={active || !selectedHash ? 1 : 0.4}
@@ -545,7 +545,7 @@ const GitGraph: React.FC = () => {
             {selectedNode && (
                 <div style={{
                     position: 'absolute', bottom: 0, left: 0, right: 0,
-                    background: 'rgba(15, 15, 30, 0.95)',
+                    background: 'var(--vscode-sideBar-background)',
                     backdropFilter: 'blur(12px)',
                     borderTop: `2px solid ${selectedNode.color}`,
                     padding: '12px 14px',

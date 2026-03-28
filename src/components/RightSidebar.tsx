@@ -58,6 +58,10 @@ const RightSidebar: React.FC = () => {
     const updateAgentStepStatus = useStore(state => state.updateAgentStepStatus);
     const setIsAgentThinking = useStore(state => state.setIsAgentThinking);
     const clearAgentMessages = useStore(state => state.clearAgentMessages);
+    const resetThread = useStore(state => state.resetThread);
+    const pendingChanges = useStore(state => state.pendingChanges);
+    const acceptPendingChange = useStore(state => state.acceptPendingChange);
+    const rejectPendingChange = useStore(state => state.rejectPendingChange);
     const addAgentFile = useStore(state => state.addAgentFile);
     const addAgentArtifact = useStore(state => state.addAgentArtifact);
     const [inputValue, setInputValue] = useState('');
@@ -160,7 +164,7 @@ const RightSidebar: React.FC = () => {
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 addAttachedContext({
-                    type: file.type.startsWith('image/') ? 'media' : 'file',
+                    type: file.type.startsWith('image/') ? 'attachment' : 'file',
                     id: `dropped-${Date.now()}-${i}`,
                     name: file.name,
                     path: (file as any).path || file.name
@@ -226,9 +230,9 @@ const RightSidebar: React.FC = () => {
             width: '100%', 
             height: '100%', 
             flexDirection: 'column', 
-            background: 'rgba(25, 25, 25, 0.85)', 
-            backdropFilter: 'blur(20px)',
-            borderLeft: '1px solid rgba(255, 255, 255, 0.1)', 
+            background: 'var(--vscode-sideBar-background)', 
+            color: 'var(--vscode-sideBar-foreground)',
+            borderLeft: '1px solid var(--vscode-sideBar-border, rgba(255, 255, 255, 0.1))', 
             zIndex: 10,
             boxShadow: '-10px 0 30px rgba(0,0,0,0.3)'
         }}>
@@ -282,9 +286,8 @@ const RightSidebar: React.FC = () => {
                 alignItems: 'center', 
                 justifyContent: 'space-between', 
                 padding: '0 18px', 
-                background: 'rgba(20,20,25,0.6)', 
-                backdropFilter: 'blur(30px)',
-                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                background: 'var(--vscode-editor-background)', 
+                borderBottom: '1px solid var(--vscode-panel-border, rgba(255,255,255,0.06))',
                 position: 'sticky',
                 top: 0,
                 zIndex: 100
@@ -294,7 +297,7 @@ const RightSidebar: React.FC = () => {
                         width: '8px', 
                         height: '8px', 
                         borderRadius: '50%', 
-                        background: aiStatus === 'alive' ? '#4ade80' : aiStatus === 'dead' ? '#f87171' : '#94a3b8',
+                        background: aiStatus === 'alive' ? '#4ade80' : '#ef4444',
                         boxShadow: aiStatus === 'alive' ? '0 0 12px rgba(74, 222, 128, 0.5)' : 'none',
                         transition: 'all 0.3s ease'
                     }}></div>
@@ -303,8 +306,8 @@ const RightSidebar: React.FC = () => {
                             {view === 'chat' ? (model.split('|')[1] || model).split(':')[0] || model : view.toUpperCase()}
                         </span>
                         {view === 'chat' && (
-                            <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.4, letterSpacing: '0.05em', maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {model.includes(':') ? model.split(':')[1] : ''}
+                            <span style={{ fontSize: '10px', fontWeight: 600, opacity: 0.4, letterSpacing: '0.04em' }}>
+                                PRIVACY-FIRST
                             </span>
                         )}
                     </div>
@@ -321,7 +324,42 @@ const RightSidebar: React.FC = () => {
                     <i className="codicon codicon-clear-all hoverable-scale" title="Clear Chat" onClick={clearAgentMessages} style={{ fontSize: '15px', opacity: view === 'chat' ? 0.6 : 0.2, cursor: view === 'chat' ? 'pointer' : 'default' }}></i>
                     <i className="codicon codicon-history hoverable-scale" title="Chat History" onClick={() => setView('history')} style={{ fontSize: '15px', opacity: view === 'history' ? 1 : 0.6, color: view === 'history' ? '#3b82f6' : 'inherit', cursor: 'pointer' }}></i>
                     <i className="codicon codicon-settings-gear hoverable-scale" title="AI Settings" onClick={() => setView('settings')} style={{ fontSize: '15px', opacity: view === 'settings' ? 1 : 0.6, color: view === 'settings' ? '#3b82f6' : 'inherit', cursor: 'pointer' }}></i>
-                    <i className="codicon codicon-chrome-close hoverable-scale" title="Close" onClick={toggle} style={{ fontSize: '16px', opacity: 0.6, cursor: 'pointer' }}></i>
+                    <i 
+                        className="codicon codicon-more hoverable-scale" 
+                        title="More Actions" 
+                        onClick={(e) => {
+                            const target = e.currentTarget as HTMLElement;
+                            const rect = target.getBoundingClientRect();
+                            // Simple mock dropdown for now
+                            const menu = document.createElement('div');
+                            menu.className = 'antigravity-glass dropdown-menu';
+                            menu.style.cssText = `position:fixed; top:${rect.bottom + 5}px; right:${window.innerWidth - rect.right}px; z-index:10000; padding:4px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); width:160px;`;
+                            
+                            const addItem = (label: string, icon: string, action: () => void) => {
+                                const item = document.createElement('div');
+                                item.className = 'hoverable';
+                                item.style.cssText = 'padding:6px 10px; font-size:12px; display:flex; gap:8px; align-items:center; cursor:pointer; border-radius:4px;';
+                                item.innerHTML = `<i class="codicon codicon-${icon}"></i> ${label}`;
+                                item.onclick = () => { action(); document.body.removeChild(menu); };
+                                menu.appendChild(item);
+                            };
+
+                            addItem('Reset Thread', 'sync', () => resetThread());
+                            addItem('Export Chat', 'export', () => console.log('Export Chat'));
+                            addItem('Clean Context', 'trash', () => clearAttachedContext());
+
+                            document.body.appendChild(menu);
+                            const closeMenu = (ev: MouseEvent) => {
+                                if (!menu.contains(ev.target as Node) && ev.target !== target) {
+                                    document.body.removeChild(menu);
+                                    window.removeEventListener('click', closeMenu);
+                                }
+                            };
+                            window.addEventListener('click', closeMenu);
+                        }}
+                        style={{ fontSize: '15px', opacity: 0.6, cursor: 'pointer' }}
+                    ></i>
+                    <i className="codicon codicon-chrome-close hoverable-scale" title="Close" onClick={toggle} style={{ fontSize: '16px', opacity: 0.6, cursor: 'pointer', color: 'var(--vscode-sideBar-foreground)' }}></i>
                 </div>
             </div>
 
@@ -377,33 +415,47 @@ const RightSidebar: React.FC = () => {
                                         }} style={{ fontSize: '14px', padding: '5px', background: 'rgba(255,255,255,0.06)', borderRadius: '6px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.05)' }}></i>
                                     </div>
                                     {/* Thoughts/Reasoning Process */}
-                                    {msg.role === 'assistant' && msg.thoughts && (
+                                    {msg.role === 'assistant' && (msg.thoughts || (typeof msg.content === 'string' && msg.content.includes('<think>'))) && (
                                         <div className="agent-thinking-process" style={{
                                             marginBottom: '10px',
-                                            padding: '8px 12px',
-                                            background: 'rgba(255, 255, 255, 0.02)',
-                                            borderLeft: '2px solid var(--vscode-button-background)',
-                                            borderRadius: '4px 8px 8px 4px',
+                                            padding: '12px 14px',
+                                            background: 'rgba(59, 130, 246, 0.04)',
+                                            borderLeft: '3px solid #3b82f6',
+                                            borderRadius: '6px 14px 14px 6px',
                                             fontSize: '12px',
-                                            color: 'rgba(255, 255, 255, 0.5)',
-                                            fontStyle: 'italic',
-                                            lineHeight: '1.5',
+                                            color: 'rgba(255, 255, 255, 0.6)',
+                                            lineHeight: '1.6',
                                             position: 'relative',
-                                            overflow: 'hidden'
+                                            overflow: 'hidden',
+                                            backdropFilter: 'blur(4px)',
+                                            border: '1px solid rgba(59, 130, 246, 0.1)',
+                                            borderLeftWidth: '3px'
                                         }}>
                                             <div style={{ 
-                                                fontSize: '9px', 
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px',
+                                                fontSize: '10px', 
                                                 textTransform: 'uppercase', 
                                                 letterSpacing: '0.1em', 
-                                                marginBottom: '4px', 
-                                                opacity: 0.6,
-                                                fontWeight: 700,
-                                                color: 'var(--vscode-button-background)'
+                                                marginBottom: '10px', 
+                                                opacity: 0.8,
+                                                fontWeight: 800,
+                                                color: '#60a5fa'
                                             }}>
-                                                Reasoning Process
+                                                <i className="codicon codicon-bracket-dot" style={{ fontSize: '12px' }}></i>
+                                                THOUGHT TRACE
                                             </div>
-                                            <div style={{ maxHeight: '120px', overflowY: 'auto', paddingRight: '4px' }}>
-                                                {msg.thoughts}
+                                            <div style={{ 
+                                                maxHeight: '180px', 
+                                                overflowY: 'auto', 
+                                                paddingRight: '6px', 
+                                                wordBreak: 'break-word',
+                                                fontFamily: 'var(--font-mono)',
+                                                fontSize: '11.5px',
+                                                opacity: 0.85
+                                            }}>
+                                                {msg.thoughts || (typeof msg.content === 'string' && msg.content.match(/<think>([\s\S]*?)<\/think>/)?.[1])}
                                             </div>
                                         </div>
                                     )}
@@ -419,7 +471,11 @@ const RightSidebar: React.FC = () => {
                                                 className="markdown-content"
                                                 style={{ wordBreak: 'break-word', lineHeight: '1.7', color: 'rgba(255,255,255,0.92)', fontSize: '13px' }}
                                                 dangerouslySetInnerHTML={{ 
-                                                    __html: marked.parse(typeof msg.content === 'string' ? msg.content : String(msg.content)) as string 
+                                                    __html: marked.parse(
+                                                        typeof msg.content === 'string' 
+                                                            ? msg.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim() 
+                                                            : String(msg.content)
+                                                    ) as string 
                                                 }}
                                             />
                                         ) : (msg.role === 'assistant' && isAgentThinking && !msg.steps?.length && idx === messages.length - 1 ? (
@@ -545,32 +601,107 @@ const RightSidebar: React.FC = () => {
 
             {view === 'chat' && (
                 <div className="agent-input-section" style={{ padding: '18px', borderTop: '1px solid rgba(255,255,255,0.04)', background: 'rgba(20,20,25,0.4)', backdropFilter: 'blur(30px)' }}>
+                    
+                    {/* Pending Changes List (Cursor-style) */}
+                    {pendingChanges.length > 0 && (
+                        <div className="pending-changes-container" style={{ marginBottom: '16px', animation: 'fadeIn 0.3s ease-out' }}>
+                            <div className="pending-changes-box" style={{ 
+                                background: 'rgba(30,30,35,0.6)', 
+                                border: '1px solid rgba(255,255,255,0.1)', 
+                                borderRadius: '12px', 
+                                overflow: 'hidden',
+                                boxShadow: '0 4px 20px rgba(0,0,0,0.3)'
+                            }}>
+                                <div style={{ maxHeight: '180px', overflowY: 'auto', padding: '10px 0' }}>
+                                    {pendingChanges.map((change, i) => (
+                                        <div key={i} className="pending-change-item" onClick={() => invoke('open_file', { path: change.path })} style={{ 
+                                            padding: '6px 16px', 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            gap: '12px',
+                                            cursor: 'pointer',
+                                            transition: 'background 0.2s',
+                                        }} onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                                            <i className="codicon codicon-primitive-dot" style={{ color: '#f97316', fontSize: '12px' }}></i>
+                                            <div style={{ display: 'flex', gap: '8px', fontSize: '11px', fontWeight: 600, minWidth: '45px' }}>
+                                                <span style={{ color: '#4ade80' }}>+{change.additions || 0}</span>
+                                                <span style={{ color: '#f87171' }}>-{change.deletions || 0}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', overflow: 'hidden' }}>
+                                                <span style={{ fontSize: '13px', fontWeight: 500, color: 'rgba(255,255,255,0.9)', whiteSpace: 'nowrap' }}>{change.path.split('/').pop()}</span>
+                                                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{change.path}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            
+                            <div className="pending-changes-footer" style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'space-between', 
+                                padding: '12px 4px 4px 2px',
+                                fontSize: '11px',
+                                opacity: 0.9
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                                    <i className="codicon codicon-chevron-right" style={{ fontSize: '12px', opacity: 0.5 }}></i>
+                                    <i className="codicon codicon-file" style={{ fontSize: '13px', opacity: 0.7 }}></i>
+                                    <span style={{ fontWeight: 600, opacity: 0.8 }}>{pendingChanges.length} {pendingChanges.length === 1 ? 'File' : 'Files'} With Changes</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                                    <span 
+                                        onClick={() => useStore.getState().rejectAllPendingChanges()}
+                                        style={{ color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontWeight: 500 }}
+                                        onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.7)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.4)'}
+                                    >Reject all</span>
+                                    <button 
+                                        onClick={() => useStore.getState().acceptAllPendingChanges()}
+                                        style={{ 
+                                            background: '#0078d4', 
+                                            border: 'none', 
+                                            color: 'white', 
+                                            padding: '4px 10px', 
+                                            borderRadius: '6px', 
+                                            fontWeight: 600, 
+                                            fontSize: '11px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >Accept all</button>
+                                    <i className="codicon codicon-chevron-down" style={{ fontSize: '12px', opacity: 0.5 }}></i>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <div 
-                        className="agent-input-wrapper" 
+                        className="agent-input-wrapper antigravity-glass" 
                         onDragOver={(e) => e.preventDefault()}
                         onDrop={handleDrop}
                         style={{ 
-                            background: 'rgba(30,30,35,0.4)', 
-                            border: '1px solid rgba(255,255,255,0.08)', 
-                            borderRadius: '20px', 
+                            background: 'rgba(30,30,35,0.25)', 
+                            border: '1px solid rgba(255,255,255,0.06)', 
+                            borderRadius: '24px', 
                             display: 'flex', 
                             flexDirection: 'column', 
                             overflow: 'hidden',
-                            boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-                            transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                            backdropFilter: 'blur(15px)'
+                            boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            backdropFilter: 'blur(30px)',
+                            padding: '4px'
                         }}>
                         {/* Attached Context Chips */}
                         {attachedContext.length > 0 && (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '12px 16px 4px 16px', background: 'rgba(255,255,255,0.02)' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '10px 14px 2px 14px' }}>
                                 {attachedContext.map((item, idx) => (
-                                    <div key={idx} style={{ 
+                                    <div key={idx} className="antigravity-glass" style={{ 
                                         display: 'flex', alignItems: 'center', gap: '6px', 
-                                        padding: '4px 10px', background: 'rgba(59, 130, 246, 0.1)', 
-                                        border: '1px solid rgba(59, 130, 246, 0.2)', borderRadius: '12px',
-                                        fontSize: '11px', color: '#93c5fd'
+                                        padding: '4px 10px', background: 'rgba(59, 130, 246, 0.08)', 
+                                        border: '1px solid rgba(59, 130, 246, 0.15)', borderRadius: '16px',
+                                        fontSize: '10px', color: '#93c5fd', fontWeight: 600
                                     }}>
-                                        <i className={`codicon codicon-${item.type === 'media' ? 'file-media' : item.type === 'file' ? 'file' : 'mention'}`} style={{ fontSize: '10px' }}></i>
+                                        <i className={`codicon codicon-${item.type === 'attachment' ? 'file-media' : item.type === 'file' ? 'file' : 'mention'}`} style={{ fontSize: '10px' }}></i>
                                         <span>{item.name}</span>
                                         <i className="codicon codicon-close" 
                                            onClick={(e) => { e.stopPropagation(); removeAttachedContext(idx); }}
@@ -580,21 +711,28 @@ const RightSidebar: React.FC = () => {
                                 ))}
                             </div>
                         )}
-                        <div style={{ position: 'relative', padding: '14px 16px' }}>
+                        <div style={{ position: 'relative', padding: '12px 16px 8px 16px' }}>
+                            {/* Input Ghost (for dynamic height) */}
+                            <div style={{ 
+                                position: 'absolute', top: '12px', left: '16px', right: '16px',
+                                opacity: 0, pointerEvents: 'none', whiteSpace: 'pre-wrap', 
+                                wordBreak: 'break-word', minHeight: '24px', fontSize: '13px'
+                            }}>{inputValue + ' '}</div>
                             {isMentionDropdownOpen && filteredSuggestions.length > 0 && (
-                                <div style={{
+                                <div className="antigravity-glass" style={{
                                     position: 'absolute',
                                     bottom: '100%',
-                                    left: '16px',
-                                    right: '16px',
-                                    background: 'var(--vscode-sideBar-background)',
-                                    border: '1px solid var(--vscode-panel-border)',
-                                    borderRadius: '6px',
-                                    boxShadow: '0 -4px 12px rgba(0,0,0,0.3)',
+                                    left: '8px',
+                                    right: '8px',
+                                    background: 'rgba(25,25,30,0.95)',
+                                    border: '1px solid rgba(255,255,255,0.08)',
+                                    borderRadius: '16px',
+                                    boxShadow: '0 -8px 24px rgba(0,0,0,0.5)',
                                     zIndex: 1000,
-                                    maxHeight: '200px',
+                                    maxHeight: '220px',
                                     overflowY: 'auto',
-                                    marginBottom: '4px'
+                                    marginBottom: '8px',
+                                    padding: '6px'
                                 }}>
                                     {filteredSuggestions.map((file, i) => (
                                         <div
@@ -602,19 +740,19 @@ const RightSidebar: React.FC = () => {
                                             onClick={() => handleMentionSelect(file)}
                                             onMouseEnter={() => setSelectedMentionIndex(i)}
                                             style={{
-                                                padding: '6px 12px',
+                                                padding: '8px 12px',
                                                 cursor: 'pointer',
                                                 fontSize: '12px',
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                gap: '8px',
-                                                background: i === selectedMentionIndex ? 'var(--vscode-list-activeSelectionBackground)' : 'transparent',
-                                                color: i === selectedMentionIndex ? 'var(--vscode-list-activeSelectionForeground)' : 'inherit'
+                                                gap: '10px',
+                                                borderRadius: '10px',
+                                                background: i === selectedMentionIndex ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                                                color: i === selectedMentionIndex ? '#fff' : 'rgba(255,255,255,0.7)'
                                             }}
                                         >
                                             <i className="codicon codicon-file" style={{ fontSize: '13px', opacity: 0.7 }}></i>
-                                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
-                                            <span style={{ fontSize: '10px', opacity: 0.4, overflow: 'hidden', textOverflow: 'ellipsis', direction: 'rtl' }}>{file.path}</span>
+                                            <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: i === selectedMentionIndex ? 600 : 400 }}>{file.name}</span>
                                         </div>
                                     ))}
                                 </div>
@@ -624,47 +762,46 @@ const RightSidebar: React.FC = () => {
                                 value={inputValue}
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={handleKeyDown}
-                                placeholder="Message Antigravity..." 
+                                placeholder="Ask antigravity..." 
                                 style={{ 
                                     width: '100%',
-                                    minHeight: '80px', background: 'transparent', border: 'none', 
-                                    color: '#fff', padding: '4px 0', resize: 'none', fontSize: '14px', 
-                                    outline: 'none', lineHeight: '1.6', opacity: 0.95,
-                                    fontFamily: 'var(--vscode-font-family)'
+                                    minHeight: '24px', background: 'transparent', border: 'none', 
+                                    outline: 'none', color: '#fff', fontSize: '13.5px', 
+                                    resize: 'none', padding: 0, lineHeight: '1.6',
+                                    fontFamily: 'inherit',
+                                    opacity: 0.9
                                 }}
-                            ></textarea>
+                            />
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', background: 'rgba(255,255,255,0.03)', borderTop: '1px solid rgba(255,255,255,0.04)', gap: '12px', justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <div onClick={onModeClick} className="premium-pill-active" style={{ cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '14px', background: 'rgba(59, 130, 246, 0.15)', border: '1px solid rgba(59, 130, 246, 0.25)', color: '#93c5fd', fontWeight: 800, letterSpacing: '0.02em', boxShadow: '0 0 15px rgba(59, 130, 246, 0.1)' }}>
-                                    <i className="codicon codicon-layers" style={{ fontSize: '12px' }}></i>
-                                    {mode.toUpperCase()}
-                                </div>
-                                <div onClick={onModelClick} style={{ cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', borderRadius: '14px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.5)', fontWeight: 700, letterSpacing: '0.02em' }}>
-                                    <i className="codicon codicon-sparkle" style={{ fontSize: '12px' }}></i>
-                                    {(model.split('|')[1] || model).split(/[:\/-]/)[0].toUpperCase()}
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                        <div style={{ 
+                            display: 'flex', alignItems: 'center', padding: '4px 12px 10px 12px', 
+                            gap: '10px' 
+                        }}>
+                            <div style={{ display: 'flex', gap: '8px', opacity: 0.6 }}>
                                 <i className="codicon codicon-add hoverable-scale" 
                                    onClick={(e) => {
                                        const target = e.currentTarget as HTMLElement;
-                                       import('../agent').then(m => m.openContextDropdown(target, (type, name, data) => {
+                                       import('../agent').then(m => m.openContextDropdown(target, (type: any, name, data) => {
                                            addAttachedContext({ type, name, data, id: `${type}-${name}-${Date.now()}` });
                                        }));
                                    }}
-                                   style={{ fontSize: '18px', opacity: 0.6, cursor: 'pointer' }} 
-                                   title="Add Context (Media, Mention, Workflow)"></i>
-                                <i onClick={onRefresh} className="codicon codicon-sync hoverable-scale" style={{ fontSize: '18px', opacity: 0.4, cursor: 'pointer' }} title="Sync Session"></i>
-                                <div onClick={onSend} className="send-btn-active" style={{ 
-                                    width: '32px', height: '32px', borderRadius: '10px', 
-                                    background: isAgentThinking ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
-                                    color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                                    boxShadow: isAgentThinking ? 'none' : '0 4px 12px rgba(37, 99, 235, 0.3)',
-                                    opacity: isAgentThinking ? 0.5 : 1
-                                }}>
-                                    <i className={`codicon codicon-${isAgentThinking ? 'loading spin' : 'arrow-up'}`} style={{ fontSize: '16px' }}></i>
-                                </div>
+                                   style={{ fontSize: '17px', cursor: 'pointer' }} 
+                                   title="Add Context"></i>
+                                <i onClick={onRefresh} className="codicon codicon-sync hoverable-scale" style={{ fontSize: '17px', cursor: 'pointer' }} title="Sync Session"></i>
+                            </div>
+
+                            <div style={{ flex: 1 }}></div>
+                            
+                            <div onClick={onSend} className={inputValue.trim() ? "send-btn-active" : ""} style={{ 
+                                width: '32px', height: '32px', borderRadius: '12px', 
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                background: inputValue.trim() ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : 'rgba(255,255,255,0.04)',
+                                cursor: inputValue.trim() ? 'pointer' : 'default',
+                                boxSizing: 'border-box',
+                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                                boxShadow: inputValue.trim() ? '0 4px 12px rgba(59, 130, 246, 0.3)' : 'none'
+                            }}>
+                                <i className="codicon codicon-arrow-up" style={{ fontSize: '18px', color: inputValue.trim() ? '#fff' : 'rgba(255,255,255,0.3)' }}></i>
                             </div>
                         </div>
                     </div>

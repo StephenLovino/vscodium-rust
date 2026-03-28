@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStore } from '../store';
+import { getThemes, applyTheme } from '../theme_engine';
+import type { VscodeTheme } from '../theme_engine';
 
 const AgentSettingsView: React.FC = () => {
     const cyberMode = useStore(state => state.cyberMode);
@@ -11,9 +13,59 @@ const AgentSettingsView: React.FC = () => {
     const agentModel = useStore(state => state.agentModel);
     const setAgentModel = useStore(state => state.setAgentModel);
     const availableModels = useStore(state => state.availableModels);
+    const setTheme = useStore(state => state.setTheme);
+    const mcpServers = useStore(state => state.mcpServers);
+    const addMcpServer = useStore(state => state.addMcpServer);
+    const removeMcpServer = useStore(state => state.removeMcpServer);
+    const listMcpServers = useStore(state => state.listMcpServers);
+    const isPullingModel = useStore(state => state.isPullingModel);
+    const pullOllamaModel = useStore(state => state.pullOllamaModel);
+    const [pullInput, setPullInput] = useState('');
+
+    const [newMcpName, setNewMcpName] = useState('');
+    const [newMcpType, setNewMcpType] = useState<'command' | 'http'>('command');
+    const [newMcpCommand, setNewMcpCommand] = useState('');
+    const [newMcpArgs, setNewMcpArgs] = useState('');
+    const [newMcpUrl, setNewMcpUrl] = useState('');
+    const [isAddingMcp, setIsAddingMcp] = useState(false);
+
+    const [themes, setThemes] = useState<VscodeTheme[]>([]);
+    const [activeThemePath, setActiveThemePath] = useState(localStorage.getItem('active-theme-path') || '');
+
+    useEffect(() => {
+        getThemes().then(setThemes).catch(console.error);
+        listMcpServers().catch(console.error);
+    }, []);
+
+    const handleThemeChange = async (path: string) => {
+        setActiveThemePath(path);
+        const monacoTheme = await applyTheme(path);
+        setTheme(monacoTheme);
+    };
 
     return (
         <div className="agent-settings-view" style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', overflowY: 'auto' }}>
+            <section>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--vscode-sideBarSectionHeader-foreground)', marginBottom: '12px', textTransform: 'uppercase' }}>
+                    Appearance & Theme
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '11px', opacity: 0.8 }}>Color Theme</label>
+                    <select 
+                        value={activeThemePath}
+                        onChange={(e) => handleThemeChange(e.target.value)}
+                        style={{ background: 'var(--vscode-dropdown-background)', color: 'var(--vscode-dropdown-foreground)', border: '1px solid var(--vscode-dropdown-border)', padding: '4px', fontSize: '12px', cursor: 'pointer', position: 'relative', zIndex: 1 }}
+                    >
+                        <option value="">Select a theme...</option>
+                        {themes.map(t => (
+                            <option key={t.id} value={t.path}>
+                                {t.label} ({t.extensionName})
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </section>
+
             <section>
                 <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--vscode-sideBarSectionHeader-foreground)', marginBottom: '12px', textTransform: 'uppercase' }}>
                     Model Configuration
@@ -23,7 +75,7 @@ const AgentSettingsView: React.FC = () => {
                     <select 
                         value={agentModel}
                         onChange={(e) => setAgentModel(e.target.value)}
-                        style={{ background: 'var(--vscode-dropdown-background)', color: 'var(--vscode-dropdown-foreground)', border: '1px solid var(--vscode-dropdown-border)', padding: '4px', fontSize: '12px' }}
+                        style={{ background: 'var(--vscode-dropdown-background)', color: 'var(--vscode-dropdown-foreground)', border: '1px solid var(--vscode-dropdown-border)', padding: '4px', fontSize: '12px', cursor: 'pointer', position: 'relative', zIndex: 1 }}
                     >
                         {availableModels.map(m => (
                             <option key={`${m.provider}|${m.id}`} value={`${m.provider}|${m.id}`}>
@@ -62,11 +114,144 @@ const AgentSettingsView: React.FC = () => {
                         </span>
                         <button 
                             onClick={() => refreshModels('ollama')}
-                            style={{ marginLeft: 'auto', background: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-secondaryForeground)', border: 'none', padding: '2px 8px', fontSize: '10px', cursor: 'pointer' }}
+                            style={{ marginLeft: 'auto', background: 'var(--vscode-button-secondaryBackground)', color: 'var(--vscode-button-secondaryForeground)', border: 'none', padding: '2px 8px', fontSize: '10px', cursor: 'pointer', borderRadius: '4px' }}
                         >
                             Reconnect
                         </button>
                     </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 600, opacity: 0.7 }}>Pull New Model</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <input 
+                                type="text"
+                                placeholder="e.g. deepseek-v3"
+                                value={pullInput}
+                                onChange={(e) => setPullInput(e.target.value)}
+                                style={{ flex: 1, background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                                disabled={isPullingModel}
+                            />
+                            <button 
+                                onClick={() => {
+                                    if (pullInput) {
+                                        pullOllamaModel(pullInput);
+                                        setPullInput('');
+                                    }
+                                }}
+                                disabled={isPullingModel || !pullInput}
+                                style={{ 
+                                    background: isPullingModel ? 'rgba(59, 130, 246, 0.2)' : 'var(--vscode-button-background)', 
+                                    color: '#fff', 
+                                    border: 'none', 
+                                    padding: '4px 12px', 
+                                    fontSize: '11px', 
+                                    cursor: isPullingModel ? 'wait' : 'pointer',
+                                    borderRadius: '4px',
+                                    fontWeight: 600
+                                }}
+                            >
+                                {isPullingModel ? 'Pulling...' : 'Pull'}
+                            </button>
+                        </div>
+                        {isPullingModel && (
+                            <div style={{ height: '2px', background: 'rgba(255,255,255,0.1)', borderRadius: '1px', marginTop: '4px', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: '100%', background: '#3b82f6', animation: 'progressIndeterminate 1.5s infinite linear' }}></div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--vscode-sideBarSectionHeader-foreground)', marginBottom: '12px', textTransform: 'uppercase', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    MCP Servers
+                    <button 
+                        onClick={() => setIsAddingMcp(!isAddingMcp)}
+                        style={{ background: 'transparent', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '10px' }}
+                    >
+                        {isAddingMcp ? 'Cancel' : '+ Add Server'}
+                    </button>
+                </div>
+
+                {isAddingMcp && (
+                    <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <input 
+                            placeholder="Server Name (e.g. filesystem)"
+                            value={newMcpName}
+                            onChange={e => setNewMcpName(e.target.value)}
+                            style={{ background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                        />
+                        <select 
+                            value={newMcpType}
+                            onChange={e => setNewMcpType(e.target.value as any)}
+                            style={{ background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                        >
+                            <option value="command">Stdio Command</option>
+                            <option value="http">HTTP Transport</option>
+                        </select>
+                        {newMcpType === 'command' ? (
+                            <>
+                                <input 
+                                    placeholder="Command (e.g. npx)"
+                                    value={newMcpCommand}
+                                    onChange={e => setNewMcpCommand(e.target.value)}
+                                    style={{ background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                                />
+                                <input 
+                                    placeholder="Args (comma separated)"
+                                    value={newMcpArgs}
+                                    onChange={e => setNewMcpArgs(e.target.value)}
+                                    style={{ background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                                />
+                            </>
+                        ) : (
+                            <input 
+                                placeholder="URL (e.g. http://localhost:3000/sse)"
+                                value={newMcpUrl}
+                                onChange={e => setNewMcpUrl(e.target.value)}
+                                style={{ background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                            />
+                        )}
+                        <button 
+                            onClick={async () => {
+                                let config: any = {};
+                                if (newMcpType === 'command') {
+                                    config = { command: newMcpCommand, args: newMcpArgs.split(',').map(a => a.trim()).filter(Boolean) };
+                                } else {
+                                    config = { url: newMcpUrl };
+                                }
+                                await addMcpServer(newMcpName, config);
+                                setIsAddingMcp(false);
+                                setNewMcpName(''); setNewMcpCommand(''); setNewMcpArgs(''); setNewMcpUrl('');
+                            }}
+                            style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '6px', fontSize: '11px', borderRadius: '4px', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                            Connect Server
+                        </button>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {mcpServers.length === 0 && !isAddingMcp && (
+                        <div style={{ fontSize: '11px', opacity: 0.4, fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>No MCP servers configured.</div>
+                    )}
+                    {mcpServers.map(server => (
+                        <div key={server.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                            <i className="codicon codicon-server" style={{ fontSize: '14px', color: '#4ade80', opacity: 0.8 }}></i>
+                            <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 600 }}>{server.name}</span>
+                                <span style={{ fontSize: '10px', opacity: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {server.config.command ? `${server.config.command} ${server.config.args.join(' ')}` : server.config.url}
+                                </span>
+                            </div>
+                            <i 
+                                className="codicon codicon-trash" 
+                                onClick={() => removeMcpServer(server.name)}
+                                style={{ fontSize: '14px', opacity: 0.4, cursor: 'pointer' }}
+                                title="Remove Server"
+                            ></i>
+                        </div>
+                    ))}
                 </div>
             </section>
 

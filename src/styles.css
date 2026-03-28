@@ -1688,7 +1688,7 @@ body {
   max-height: 0 !important;
 }
 
-/* Antigravity Premium Agent Styles */
+/* AI Agent Premium Styles */
 .agent-message {
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: text;
@@ -1910,6 +1910,8 @@ body {
   line-height: 1.6;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.9);
+  word-break: break-word; /* Ensure all text wraps */
+  overflow-x: hidden;    /* Prevent horizontal scrolling of the container */
 }
 
 .markdown-content h1, 
@@ -1956,13 +1958,14 @@ body {
 
 .markdown-content ul, 
 .markdown-content ol {
-  padding-left: 2em;
+  padding-left: 1.5em; /* Reduced from 2em for narrow sidebar */
   margin-top: 0;
   margin-bottom: 16px;
 }
 
 .markdown-content li {
   margin-top: 0.25em;
+  word-break: break-word;
 }
 
 .markdown-content code {
@@ -1972,17 +1975,19 @@ body {
   background-color: rgba(255, 255, 255, 0.1);
   border-radius: 6px;
   font-family: var(--font-mono);
+  word-break: break-all; /* Ensure long inline code wraps */
 }
 
 .markdown-content pre {
-  padding: 16px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-  background-color: rgba(0, 0, 0, 0.3);
+  padding: 12px; /* Reduced from 16px */
+  overflow-x: auto;
+  font-size: 12px; /* Consistency check */
+  line-height: 1.5;
+  background-color: rgba(0, 0, 0, 0.35);
   border-radius: 8px;
   margin-bottom: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  max-width: 100%; /* Ensure it doesn't overflow */
 }
 
 .markdown-content pre code {
@@ -1991,8 +1996,8 @@ body {
   background-color: transparent;
   border: 0;
   font-size: 100%;
-  word-break: normal;
-  white-space: pre;
+  word-break: break-word; /* Change from normal to help wrapping */
+  white-space: pre-wrap;  /* Force wrap for code blocks */
 }
 
 .markdown-content blockquote {
@@ -2040,4 +2045,27 @@ body {
   margin: 24px 0;
   background-color: rgba(255, 255, 255, 0.1);
   border: 0;
+}
+
+/* Agent UI Enhancements */
+@keyframes progressIndeterminate {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.agent-thinking-process ::-webkit-scrollbar {
+  width: 4px;
+}
+
+.agent-thinking-process ::-webkit-scrollbar-thumb {
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 10px;
+}
+
+.agent-thinking-process ::-webkit-scrollbar-thumb:hover {
+  background: rgba(59, 130, 246, 0.4);
+}
+
+.markdown-content think {
+    display: none;
 }

@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
+import { useStore } from '../store';
+import { invoke } from '../tauri_bridge';
 
 const TitleBar: React.FC = () => {
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
+    const agentModel = useStore(state => state.agentModel);
+    const ollamaStatus = useStore(state => state.ollamaStatus);
+    const cyberMode = useStore(state => state.cyberMode);
 
     const menus = [
         { label: 'File', items: ['New File', 'New Window', 'Open...', 'Save', 'Close Editor'] },
@@ -82,7 +87,55 @@ const TitleBar: React.FC = () => {
                 </div>
             </div>
 
-            <div className="title-bar-right">
+            <div className="title-bar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '12px' }}>
+                {/* AI Model Badge */}
+                <div 
+                    className="ai-model-badge"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '3px 8px',
+                        background: 'rgba(59, 130, 246, 0.1)',
+                        border: '1px solid rgba(59, 130, 246, 0.15)',
+                        borderRadius: '100px', // Pill shape
+                        fontSize: '10px',
+                        fontWeight: 700,
+                        color: cyberMode ? '#a78bfa' : '#60a5fa',
+                        marginRight: '8px',
+                        letterSpacing: '0.02em',
+                        backdropFilter: 'blur(5px)'
+                    }}
+                >
+                    <i className="codicon codicon-sparkle" style={{ fontSize: '10px' }}></i>
+                    <span>{(agentModel.split('|')[1] || agentModel).split(':')[0].toUpperCase()}</span>
+                    {agentModel.toLowerCase().includes('ollama') && (
+                        <div 
+                            title={ollamaStatus === 'running' ? 'Ollama: Connected' : 'Ollama: Not Connected'}
+                            style={{
+                                width: '6px',
+                                height: '6px',
+                                borderRadius: '50%',
+                                background: ollamaStatus === 'running' ? '#10b981' : '#f43f5e',
+                                boxShadow: ollamaStatus === 'running' ? '0 0 4px #10b981' : 'none'
+                            }}
+                        ></div>
+                    )}
+                </div>
+
+                <div 
+                    title="Privacy Guard Active"
+                    style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '4px',
+                        opacity: 0.4,
+                        cursor: 'help'
+                    }}
+                >
+                    <i className="codicon codicon-shield" style={{ fontSize: '12px' }}></i>
+                </div>
+
                 <i className="codicon codicon-layout-centered-single hoverable" title="Toggle Layout"></i>
                 <i
                     className="codicon codicon-layout-sidebar-right hoverable"

@@ -107,6 +107,7 @@ struct EditorState {
     android_sdk_path: Mutex<Option<String>>,
     auth_state: Arc<ai_auth::AuthState>,
     browser_state: Arc<browser::BrowserState>,
+    mcp_registry: Arc<mcp_registry::McpRegistry>,
 }
 
 impl EditorState {
@@ -152,6 +153,9 @@ impl EditorState {
             android_sdk_path: Mutex::new(None),
             auth_state,
             browser_state,
+            mcp_registry: Arc::new(mcp_registry::McpRegistry::new(
+                PathBuf::from("/Users/hades/.gemini/antigravity/mcp_config.json")
+            )),
         }
     }
 }
@@ -254,6 +258,7 @@ async fn open_folder(app: tauri::AppHandle, state: State<'_, EditorState>) -> Re
         };
         let mut root = state.active_root.lock().unwrap();
         *root = Some(path.clone());
+        state._sentient.set_root_path(path.clone());
         return Ok(Some(path.to_string_lossy().to_string()));
     }
     Ok(None)
@@ -507,6 +512,21 @@ async fn save_api_keys(state: State<'_, EditorState>, keys: Value) -> Result<Has
 }
 
 #[tauri::command]
+async fn list_mcp_servers(state: State<'_, EditorState>) -> Result<Value, String> {
+    Ok(json!(state.mcp_registry.list_servers().await))
+}
+
+#[tauri::command]
+async fn add_mcp_server(state: State<'_, EditorState>, name: String, config: mcp_registry::McpServerConfig) -> Result<(), String> {
+    state.mcp_registry.add_server(name, config).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn remove_mcp_server(state: State<'_, EditorState>, name: String) -> Result<(), String> {
+    state.mcp_registry.remove_server(&name).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn set_ai_model(state: State<'_, EditorState>, model: String) -> Result<(), String> {
     let mut current = state.current_model.lock().unwrap();
     *current = model;
@@ -757,6 +777,42 @@ fn write_file(state: tauri::State<'_, EditorState>, path: String, content: Strin
 }
 
 #[tauri::command]
+fn update_project_memory(state: tauri::State<'_, EditorState>, content: String) -> Result<(), String> {
+    let root = state.active_root.lock().unwrap().clone().unwrap_or_else(|| PathBuf::from("."));
+    let memory_path = root.join("MEMORY.md");
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&memory_path)
+        .map_err(|e| e.to_string())?;
+    use std::io::Write;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    // Format as YYYY-MM-DD HH:MM (UTC) from unix seconds
+    let (y, mo, d, h, mi) = {
+        let s = secs;
+        let days = s / 86400;
+        let rem = s % 86400;
+        let h = rem / 3600;
+        let mi = (rem % 3600) / 60;
+        // Approximate Gregorian date from epoch days
+        let z = days + 719468;
+        let era = z / 146097;
+        let doe = z - era * 146097;
+        let yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365*yoe + yoe/4 - yoe/100);
+        let mp = (5*doy + 2) / 153;
+        let d = doy - (153*mp+2)/5 + 1;
+        let mo = if mp < 10 { mp + 3 } else { mp - 9 };
+        let y = if mo <= 2 { y + 1 } else { y };
+        (y, mo, d, h, mi)
+    };
+    let entry = format!("\n\n### [{y:04}-{mo:02}-{d:02} {h:02}:{mi:02} UTC]\n{content}\n");
+    file.write_all(entry.as_bytes()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 fn git_status(path: String) -> Result<Vec<git::GitFileStatus>, String> {
     let manager = GitManager::new();
     manager.get_status(path)
@@ -905,7 +961,7 @@ fn stop_ai_agent(state: State<'_, EditorState>) -> Result<(), String> {
 
 #[tauri::command]
 fn backend_ping() -> String {
-    "Antigravity Pulse: ACTIVE".to_string()
+    "System Pulse: ACTIVE".to_string()
 }
 
 #[tauri::command]
@@ -925,8 +981,34 @@ async fn list_mcp_servers(state: State<'_, EditorState>) -> Result<Vec<String>, 
 }
 
 #[tauri::command]
-fn get_installed_themes(_state: State<'_, EditorState>) -> Result<Vec<Value>, String> {
-    Ok(vec![])
+fn get_installed_themes(state: State<'_, EditorState>) -> Result<Vec<Value>, String> {
+    let host = state.ext_host.lock().map_err(|e| e.to_string())?;
+    let mut themes = Vec::new();
+    
+    for ext in &host.extensions {
+        if let Some(contributes) = &ext.contributes {
+            if let Some(contributed_themes) = contributes.get("themes").and_then(|v| v.as_array()) {
+                for theme in contributed_themes {
+                    if let Some(label) = theme.get("label").and_then(|v| v.as_str()) {
+                        if let Some(path) = theme.get("path").and_then(|v| v.as_str()) {
+                            let extension_path = &ext.extension_path;
+                            let theme_file_path = extension_path.join(path);
+                            
+                            themes.push(json!({
+                                "id": format!("{}-{}", ext.name, label),
+                                "label": label,
+                                "path": theme_file_path.to_string_lossy().to_string(),
+                                "uiTheme": theme.get("uiTheme").and_then(|v| v.as_str()).unwrap_or("vs-dark"),
+                                "extensionName": ext.name
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(themes)
 }
 
 #[tauri::command]
@@ -972,16 +1054,37 @@ fn load_extension_theme(path: String) -> Result<Value, String> {
     let p = std::path::Path::new(&path);
     let theme_json = load_theme_recursive(p)?;
     
-    if let Some(colors) = theme_json.get("colors") {
-        Ok(colors.clone())
-    } else {
-        Ok(json!({}))
-    }
+    Ok(theme_json)
 }
 
 #[tauri::command] fn register_ida_pro() -> Result<(), String> { Ok(()) }
 #[tauri::command] fn ai_execute_command(_command: String) -> Result<String, String> { Ok("Executed".to_string()) }
-#[tauri::command] fn ai_modify_file(_path: String, _instruction: String) -> Result<(), String> { Ok(()) }
+#[tauri::command]
+fn propose_file_change(state: tauri::State<'_, EditorState>, path: String, content: String, description: String) -> Result<serde_json::Value, String> {
+    let path_buf = PathBuf::from(&path);
+    validate_path(&state, &path_buf)?;
+    
+    let old_content = if path_buf.exists() {
+        fs::read_to_string(&path_buf).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    Ok(serde_json::json!({
+        "path": path,
+        "oldContent": old_content,
+        "newContent": content,
+        "description": description
+    }))
+}
+
+#[tauri::command]
+fn ai_modify_file(_state: tauri::State<'_, EditorState>, path: String, instruction: String) -> Result<(), String> {
+    // This is a stub for the AI to "think" about a modification
+    // The actual modification will come back as a write_file which we intercept
+    println!("AI requested modification for path: {}, instruction: {}", path, instruction);
+    Ok(())
+}
 #[tauri::command] fn get_icon_theme_mapping() -> Result<Value, String> { Ok(json!({})) }
 #[tauri::command] 
 async fn hunt_api_keys(app: tauri::AppHandle, state: State<'_, EditorState>) -> Result<Value, String> {
@@ -1096,6 +1199,16 @@ async fn capture_ai_session(app: tauri::AppHandle, provider: String) -> Result<c
 #[tauri::command] fn emulator_tap(_x: i32, _y: i32) -> Result<(), String> { Ok(()) }
 
 #[tauri::command]
+async fn check_ollama_status(state: State<'_, EditorState>) -> Result<bool, String> {
+    state._sentient.check_ollama_status().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn pull_ollama_model(state: State<'_, EditorState>, name: String) -> Result<(), String> {
+    state._sentient.pull_model(&name).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn set_ollama_url(
     state: State<'_, EditorState>,
     url: String,
@@ -1157,11 +1270,18 @@ pub fn run() {
             });
 
             app.manage(state.browser_state.clone());
+            let mcp_registry = state.mcp_registry.clone();
             app.manage(state);
+            
+            // Initialize MCP servers in background
+            tauri::async_runtime::spawn(async move {
+                let _ = mcp_registry.initialize_servers().await;
+            });
+            
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            open_folder, get_file_tree, get_directory_contents, read_file, write_file,
+            open_folder, get_file_tree, get_directory_contents, read_file, write_file, update_project_memory,
             create_file, create_directory, rename_path, delete_path, list_dir_flat,
             search_project, get_git_branch, git_status, git_stage,
             git_unstage, git_commit, get_api_keys, save_api_keys,
@@ -1171,10 +1291,10 @@ pub fn run() {
             get_installed_themes, load_extension_theme,
             debug_start, debug_send, debug_stop, check_activation_event,
             adb_list_devices, adb_list_emulators, spawn_emulator, 
-            set_active_device, set_ai_model, register_mcp_server, list_mcp_servers,
+            set_active_device, set_ai_model, list_mcp_servers, add_mcp_server, remove_mcp_server,
             backend_ping, get_git_history, adb_install_and_run,
-            set_ollama_url, stop_ai_agent,
-            register_ida_pro, ai_execute_command, ai_modify_file,
+            set_ollama_url, check_ollama_status, pull_ollama_model, stop_ai_agent,
+            register_ida_pro, ai_execute_command, ai_modify_file, propose_file_change,
             get_icon_theme_mapping, hunt_api_keys, optimize_memory,
             start_mitm_server, stop_mitm_server, get_mitm_status,
             open_ai_login, save_ai_session, capture_ai_session,

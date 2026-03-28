@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import MonacoEditor from '@monaco-editor/react';
 import type { OnMount, OnChange } from '@monaco-editor/react';
 import { useStore } from '../store';
+import DiffViewer from './DiffViewer';
 
 const CTRL_S = 2048 | 49; // KeyMod.CtrlCmd | KeyCode.KeyS
 
@@ -35,29 +36,35 @@ const Editor: React.FC = () => {
         }
     }, [activeTabId, updateTabContent]);
 
+    const pendingChanges = useStore(state => state.pendingChanges);
+    const activeFilePendingChange = pendingChanges.find(c => c.path === activeTab?.path);
+
     // When switching tabs, sync the editor value
     useEffect(() => {
         if (editorRef.current && activeTab) {
             const currentValue = editorRef.current.getValue();
-            if (currentValue !== activeTab.content) {
-                editorRef.current.setValue(activeTab.content);
+            // If there's a pending change, show the new content
+            const targetContent = activeFilePendingChange ? activeFilePendingChange.newContent : activeTab.content;
+            if (currentValue !== targetContent) {
+                editorRef.current.setValue(targetContent);
             }
         }
-    }, [activeTabId]);
+    }, [activeTabId, activeFilePendingChange]);
 
     if (!activeTab) {
         return null;
     }
 
     return (
-        <MonacoEditor
-            height="100%"
-            width="100%"
-            theme={theme}
-            language={activeTab.language}
-            value={activeTab.content}
-            onMount={handleMount}
-            onChange={handleChange}
+        <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+            <MonacoEditor
+                height="100%"
+                width="100%"
+                theme={theme}
+                language={activeTab.language}
+                value={activeFilePendingChange ? activeFilePendingChange.newContent : activeTab.content}
+                onMount={handleMount}
+                onChange={handleChange}
             options={{
                 fontSize: 13,
                 fontFamily: 'var(--font-mono)',
@@ -78,7 +85,8 @@ const Editor: React.FC = () => {
                 cursorSmoothCaretAnimation: 'on',
                 bracketPairColorization: { enabled: true },
             }}
-        />
+            />
+        </div>
     );
 };
 

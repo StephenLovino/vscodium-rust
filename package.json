@@ -18,6 +18,7 @@
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
     "@tauri-apps/plugin-dialog": "^2.6.0",
+    "@types/diff": "^7.0.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/react-window": "^1.8.8",
@@ -25,6 +26,7 @@
     "@vscode/codicons": "^0.0.44",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "diff": "^8.0.4",
     "marked": "^17.0.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

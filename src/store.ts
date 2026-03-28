@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
+import { computeDiffBlocks, patchContentSelective } from './services/DiffService';
 
 interface EditorTab {
     id: string;
@@ -17,6 +18,19 @@ export interface AgentStep {
     result?: string;
 }
 
+export interface PendingChange {
+    id: string;
+    path: string;
+    originalContent: string;
+    proposedContent: string;
+    newContent: string; // The draft with some hunks possibly accepted/rejected
+    description?: string;
+    additions?: number;
+    deletions?: number;
+    acceptedHunkIds?: string[];
+    rejectedHunkIds?: string[];
+}
+
 export interface AgentMessage {
     role: 'user' | 'assistant';
     content: string;
@@ -28,7 +42,7 @@ export interface AgentMessage {
 }
 
 export interface AttachedContext {
-    type: 'media' | 'mention' | 'workflow' | 'file';
+    type: 'attachment' | 'mention' | 'workflow' | 'file';
     id: string; // path or unique id
     name: string;
     data?: string;
@@ -41,6 +55,11 @@ export interface FileEntry {
     is_dir: boolean;
     is_expanded?: boolean;
     children?: FileEntry[];
+}
+
+export interface McpServer {
+    name: string;
+    config: any;
 }
 
 interface AppState {
@@ -73,7 +92,7 @@ interface AppState {
     extensionContributions: any;
     mitmStatus: 'idle' | 'running' | 'error';
     mitmLogs: string[];
-    mcpServers: string[];
+    mcpServers: McpServer[];
     ollamaStatus: 'idle' | 'checking' | 'running' | 'error';
     agentMessages: AgentMessage[];
     isAgentThinking: boolean;
@@ -84,7 +103,10 @@ interface AppState {
     commandPaletteQuery: string;
     cyberMode: boolean;
     ollamaUrl: string;
+    isPullingModel: boolean;
+    pullProgress: number;
     attachedContext: AttachedContext[];
+    pendingChanges: PendingChange[];
 
     // Project Memory (spec-kit / AGENTS.md / CLAUDE.md)
     projectMemory: string;
@@ -122,6 +144,8 @@ interface AppState {
     saveActiveFile: () => Promise<void>;
     setCyberMode: (enabled: boolean) => void;
     setOllamaUrl: (url: string) => void;
+    checkOllamaStatus: () => Promise<void>;
+    pullOllamaModel: (name: string) => Promise<void>;
     openSettings: () => void;
     setProjectMemory: (content: string, files?: string[]) => void;
 
@@ -130,7 +154,8 @@ interface AppState {
     startMitm: () => Promise<void>;
     stopMitm: () => Promise<void>;
     addMitmLog: (log: string) => void;
-    registerMcpServer: (name: string, command: string, args: string[]) => Promise<void>;
+    addMcpServer: (name: string, config: any) => Promise<void>;
+    removeMcpServer: (name: string) => Promise<void>;
     listMcpServers: () => Promise<void>;
     addAgentMessage: (role: 'user' | 'assistant', content: string, context?: AttachedContext[]) => void;
     updateLastAgentMessage: (content: string) => void;
@@ -140,7 +165,17 @@ interface AppState {
     addAgentArtifact: (type: 'walkthrough' | 'task', path: string) => void;
     setIsAgentThinking: (isThinking: boolean) => void;
     clearAgentMessages: () => void;
+    resetThread: () => void;
     truncateAgentMessages: (index: number) => void;
+    
+    // Diff Review Actions
+    proposePendingChange: (change: Omit<PendingChange, 'id'>) => void;
+    acceptPendingChange: (id: string) => Promise<void>;
+    rejectPendingChange: (id: string) => void;
+    acceptAllPendingChanges: () => Promise<void>;
+    rejectAllPendingChanges: () => void;
+    acceptHunk: (changeId: string, hunkId: string) => Promise<void>;
+    rejectHunk: (changeId: string, hunkId: string) => void;
     setCommandPaletteOpen: (open: boolean) => void;
     setContextMenuOpen: (open: boolean, x?: number, y?: number) => void;
     setDebugToolbarOpen: (open: boolean) => void;
@@ -206,8 +241,11 @@ export const useStore = create<AppState>((set, get) => ({
     contextMenuPosition: { x: 0, y: 0 },
     commandPaletteQuery: '',
     cyberMode: false,
-    ollamaUrl: 'http://127.0.0.1:11434',
+    ollamaUrl: 'http://localhost:11434',
+    isPullingModel: false,
+    pullProgress: 0,
     attachedContext: [],
+    pendingChanges: [],
 
     // Project Memory
     projectMemory: '',
@@ -255,9 +293,29 @@ export const useStore = create<AppState>((set, get) => ({
     setEmulators: (emulators) => set({ emulators }),
     setExtensionContributions: (extensionContributions) => set({ extensionContributions }),
     setCyberMode: (enabled) => set({ cyberMode: enabled }),
-    setOllamaUrl: (url) => {
+    setOllamaUrl: (url: string) => {
         set({ ollamaUrl: url });
         invoke('set_ollama_url', { url }).catch(console.error);
+    },
+    checkOllamaStatus: async () => {
+        set({ ollamaStatus: 'checking' });
+        try {
+            const isRunning = await invoke<boolean>('check_ollama_status');
+            set({ ollamaStatus: isRunning ? 'running' : 'error' });
+        } catch (e) {
+            set({ ollamaStatus: 'error' });
+        }
+    },
+    pullOllamaModel: async (name: string) => {
+        set({ isPullingModel: true, pullProgress: 0 });
+        try {
+            await invoke('pull_ollama_model', { name });
+            get().refreshAvailableModels('ollama');
+        } catch (e) {
+            console.error('Failed to pull model:', e);
+        } finally {
+            set({ isPullingModel: false });
+        }
     },
 
     refreshFileTree: async () => {
@@ -455,23 +513,29 @@ export const useStore = create<AppState>((set, get) => ({
             get().addMitmLog(`Error stopping server: ${e}`);
         }
     },
-
     addMitmLog: (log) => set((state) => ({ 
         mitmLogs: [...state.mitmLogs, `[${new Date().toLocaleTimeString()}] ${log}`].slice(-100) 
     })),
 
-    registerMcpServer: async (name, command, args) => {
+    addMcpServer: async (name, config) => {
         try {
-            await invoke('register_mcp_server', { name, command, args });
+            await invoke('add_mcp_server', { name, config });
             await get().listMcpServers();
         } catch (e) {
-            console.error('Register MCP Server Error:', e);
+            console.error('Add MCP Server Error:', e);
         }
     },
-
+    removeMcpServer: async (name) => {
+        try {
+            await invoke('remove_mcp_server', { name });
+            await get().listMcpServers();
+        } catch (e) {
+            console.error('Remove MCP Server Error:', e);
+        }
+    },
     listMcpServers: async () => {
         try {
-            const servers = await invoke<string[]>('list_mcp_servers');
+            const servers = await invoke<McpServer[]>('list_mcp_servers');
             set({ mcpServers: servers });
         } catch (e) {
             console.error('List MCP Servers Error:', e);
@@ -601,6 +665,10 @@ export const useStore = create<AppState>((set, get) => ({
         });
     },
     clearAgentMessages: () => set({ agentMessages: [] }),
+    resetThread: () => {
+        set({ agentMessages: [], pendingChanges: [], attachedContext: [] });
+        invoke('set_ai_status', { status: 'alive' }).catch(console.error);
+    },
     truncateAgentMessages: (index: number) => set((state) => ({ 
         agentMessages: state.agentMessages.slice(0, index) 
     })),
@@ -644,6 +712,98 @@ export const useStore = create<AppState>((set, get) => ({
         } else {
             set({ fileTree: updateExpansionRecursive(state.fileTree) });
         }
+    },
+
+    // Diff Review Implementation
+    proposePendingChange: (change) => {
+        const id = Math.random().toString(36).substring(7);
+        set((state) => ({
+            pendingChanges: [...state.pendingChanges, { 
+                id,
+                path: change.path,
+                originalContent: (change as any).oldContent || '',
+                proposedContent: (change as any).newContent || '',
+                newContent: (change as any).newContent || '',
+                description: change.description,
+                additions: change.additions,
+                deletions: change.deletions,
+                acceptedHunkIds: [],
+                rejectedHunkIds: [],
+            }]
+        }));
+    },
+
+    acceptPendingChange: async (id) => {
+        const change = get().pendingChanges.find(c => c.id === id);
+        if (!change) return;
+
+        try {
+            await invoke('write_file', { path: change.path, content: change.newContent });
+            
+            // Update open tabs if necessary
+            const tab = get().tabs.find(t => t.path === change.path);
+            if (tab) {
+                get().updateTabContent(tab.id, change.newContent);
+            }
+
+            set((state) => ({
+                pendingChanges: state.pendingChanges.filter(c => c.id !== id)
+            }));
+            
+            await get().refreshFileTree();
+        } catch (error) {
+            console.error('Failed to accept pending change:', error);
+        }
+    },
+
+    rejectPendingChange: (id) => {
+        set((state) => ({
+            pendingChanges: state.pendingChanges.filter(c => c.id !== id)
+        }));
+    },
+
+    acceptAllPendingChanges: async () => {
+        const changes = get().pendingChanges;
+        for (const change of changes) {
+            await get().acceptPendingChange(change.id);
+        }
+    },
+
+    rejectAllPendingChanges: () => {
+        set({ pendingChanges: [] });
+    },
+
+    acceptHunk: async (changeId: string, hunkId: string) => {
+        set((state) => {
+            const change = state.pendingChanges.find(c => c.id === changeId);
+            if (!change) return state;
+            const accepted = change.acceptedHunkIds || [];
+            if (accepted.includes(hunkId)) return state;
+            
+            return {
+                pendingChanges: state.pendingChanges.map(c => 
+                    c.id === changeId ? { ...c, acceptedHunkIds: [...accepted, hunkId] } : c
+                )
+            };
+        });
+    },
+
+    rejectHunk: (changeId: string, hunkId: string) => {
+        set((state) => {
+            const change = state.pendingChanges.find(c => c.id === changeId);
+            if (!change) return state;
+            const rejected = change.rejectedHunkIds || [];
+            if (rejected.includes(hunkId)) return state;
+
+            const newRejected = [...rejected, hunkId];
+            const newContent = patchContentSelective(change.originalContent, change.proposedContent, newRejected);
+
+            return {
+                pendingChanges: state.pendingChanges.map(c => 
+                    c.id === changeId ? { ...c, rejectedHunkIds: newRejected, newContent } : c
+                )
+            };
+        });
     },
 }));
 

@@ -114,7 +114,7 @@ const WorkflowPanel: React.FC = () => {
                     </div>
                 </div>
                 <div style={{ fontSize: '11px', opacity: 0.8, lineHeight: '1.4' }}>
-                    Clicking a workflow triggers the Antigravity Agent to autonomous evaluate and execute the steps defined in the workflow file.
+                    Clicking a workflow triggers the AI Agent to autonomously evaluate and execute the steps defined in the workflow file.
                 </div>
             </div>
         </div>

@@ -11,7 +11,7 @@ interface Settings {
 }
 
 const SettingsPage: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'user' | 'workspace' | 'antigravity'>('user');
+    const [activeTab, setActiveTab] = useState<'user' | 'workspace' | 'agent'>('user');
     const setTheme = useStore(state => state.setTheme);
     const ollamaStatus = useStore(state => state.ollamaStatus);
     const refreshAvailableModels = useStore(state => state.refreshAvailableModels);
@@ -62,8 +62,8 @@ const SettingsPage: React.FC = () => {
         </div>
     );
 
-    const renderAntigravitySettings = () => (
-        <div className="antigravity-settings">
+    const renderAgentSettings = () => (
+        <div className="agent-settings">
             <div className="settings-section">
                 <div className="settings-section-title">AI Engine</div>
                 {renderSettingItem(
@@ -111,12 +111,12 @@ const SettingsPage: React.FC = () => {
             <div className="settings-tabs">
                 <div className={`settings-tab ${activeTab === 'user' ? 'active' : ''}`} onClick={() => setActiveTab('user')}>User</div>
                 <div className={`settings-tab ${activeTab === 'workspace' ? 'active' : ''}`} onClick={() => setActiveTab('workspace')}>Workspace</div>
-                <div className={`settings-tab ${activeTab === 'antigravity' ? 'active' : ''}`} onClick={() => setActiveTab('antigravity')}>Antigravity Settings</div>
+                <div className={`settings-tab ${activeTab === 'agent' ? 'active' : ''}`} onClick={() => setActiveTab('agent')}>AI Agent Settings</div>
             </div>
 
             <div className="settings-content">
-                {activeTab === 'antigravity' ? (
-                    renderAntigravitySettings()
+                {activeTab === 'agent' ? (
+                    renderAgentSettings()
                 ) : (
                     <div className="settings-section">
                         <div className="settings-section-title">Commonly Used</div>

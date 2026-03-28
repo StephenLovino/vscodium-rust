@@ -1,5 +1,7 @@
 import { invoke, listen } from './tauri_bridge.ts';
 import { browserOpen, browserNavigate, browserScreenshot, browserClose } from './browser.ts';
+import { useStore } from './store.ts';
+import type { PendingChange } from './store.ts';
 
 export interface ChatMessage {
     role: "system" | "user" | "assistant";
@@ -14,38 +16,63 @@ let currentAgentProvider = "Google";
 let currentAgentModel = "gemini-2.5-pro";
 let currentAgentMode = "Planning";
 
-function createPopover(x: number, y: number, items: { label: string, value: string, desc?: string }[], onSelect: (val: string, label: string) => void) {
+function createPopover(element: HTMLElement, items: { label: string, value: string, desc?: string, icon?: string }[], onSelect: (val: string, label: string) => void) {
     const existing = document.getElementById("agent-popover");
     if (existing) existing.remove();
 
+    const rect = element.getBoundingClientRect();
     const popover = document.createElement("div");
     popover.id = "agent-popover";
     popover.style.position = "absolute";
-    popover.style.left = `${x}px`;
-    popover.style.bottom = `${window.innerHeight - y + 10}px`;
-    popover.style.background = "#252526";
-    popover.style.border = "1px solid #454545";
+    
+    // Smart positioning: if on the right half of the screen, right-align.
+    const isRight = rect.left > window.innerWidth / 2;
+    if (isRight) {
+        popover.style.right = `${window.innerWidth - rect.right}px`;
+    } else {
+        popover.style.left = `${rect.left}px`;
+    }
+    
+    popover.style.bottom = `${window.innerHeight - rect.top + 10}px`;
+    popover.style.background = "var(--vscode-menu-background, #252526)";
+    popover.style.border = "1px solid var(--vscode-menu-border, #454545)";
     popover.style.borderRadius = "6px";
-    popover.style.boxShadow = "0 4px 14px rgba(0,0,0,0.5)";
+    popover.style.boxShadow = "0 8px 24px rgba(0,0,0,0.5)";
     popover.style.padding = "4px 0";
-    popover.style.zIndex = "9999";
+    popover.style.zIndex = "10000";
     popover.style.minWidth = "220px";
-    popover.style.maxHeight = "300px";
+    popover.style.maxWidth = "320px";
+    popover.style.maxHeight = "400px";
     popover.style.overflowY = "auto";
-    popover.style.color = "#ccc";
-    popover.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'system-ui', sans-serif";
+    popover.style.color = "var(--vscode-menu-foreground, #ccc)";
+    popover.style.fontFamily = "var(--vscode-font-family, -apple-system, system-ui, sans-serif)";
     popover.style.fontSize = "12px";
     popover.style.pointerEvents = "auto";
+    popover.style.animation = "popoverSlideIn 0.2s ease-out";
+
+    // Add CSS for fade-in animation if not exists
+    if (!document.getElementById("agent-popover-style")) {
+        const style = document.createElement("style");
+        style.id = "agent-popover-style";
+        style.innerHTML = `
+            @keyframes popoverSlideIn {
+                from { opacity: 0; transform: translateY(10px) scale(0.98); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            .popover-item:hover { background: var(--vscode-menu-selectionBackground, #04395e) !important; color: var(--vscode-menu-selectionForeground, #fff) !important; }
+            .popover-item:hover .popover-desc { color: rgba(255,255,255,0.7) !important; }
+        `;
+        document.head.appendChild(style);
+    }
 
     items.forEach(item => {
         const row = document.createElement("div");
-        row.style.padding = "6px 12px";
+        row.className = "popover-item";
+        row.style.padding = "8px 12px";
         row.style.cursor = "pointer";
         row.style.display = "flex";
         row.style.flexDirection = "column";
-
-        row.onmouseover = () => row.style.background = "#04395e";
-        row.onmouseout = () => row.style.background = "transparent";
+        row.style.transition = "background 0.1s ease";
 
         row.onclick = (e) => {
             e.stopPropagation();
@@ -53,17 +80,31 @@ function createPopover(x: number, y: number, items: { label: string, value: stri
             popover.remove();
         };
 
-        const title = document.createElement("div");
-        title.innerText = item.label;
-        title.style.color = "#fff";
-        row.appendChild(title);
+        const titleRow = document.createElement("div");
+        titleRow.style.display = "flex";
+        titleRow.style.alignItems = "center";
+        titleRow.style.gap = "8px";
+        
+        if (item.icon) {
+            const icon = document.createElement("i");
+            icon.className = `codicon codicon-${item.icon}`;
+            titleRow.appendChild(icon);
+        }
+
+        const titleText = document.createElement("span");
+        titleText.innerText = item.label;
+        titleText.style.fontWeight = "500";
+        titleRow.appendChild(titleText);
+        row.appendChild(titleRow);
 
         if (item.desc) {
             const desc = document.createElement("div");
+            desc.className = "popover-desc";
             desc.innerText = item.desc;
             desc.style.fontSize = "11px";
-            desc.style.color = "#999";
-            desc.style.marginTop = "2px";
+            desc.style.color = "var(--vscode-descriptionForeground, #999)";
+            desc.style.marginTop = "4px";
+            desc.style.lineHeight = "1.4";
             row.appendChild(desc);
         }
 
@@ -76,20 +117,19 @@ function createPopover(x: number, y: number, items: { label: string, value: stri
         const closeListener = (e: MouseEvent) => {
             if (!popover.contains(e.target as Node)) {
                 popover.remove();
-                document.removeEventListener("click", closeListener);
+                document.removeEventListener("mouseup", closeListener);
             }
         };
-        document.addEventListener("click", closeListener);
+        document.addEventListener("mouseup", closeListener);
     }, 0);
 }
 
 export function openModeDropdown(element: HTMLElement, onSelect: (label: string) => void) {
-    const rect = element.getBoundingClientRect();
-    createPopover(rect.left, rect.top, [
-        { label: "Planning", value: "Planning", desc: "Agent can plan before executing tasks. Use for deep research, complex tasks, or collaborative work" },
-        { label: "Planning (Source Control)", value: "Planning (Source Control)", desc: "Deep dive into git history and planning source control workflows" },
-        { label: "Fast", value: "Fast", desc: "Agent will execute tasks directly. Use for simple tasks that can be completed faster" },
-        { label: "Cybersecurity", value: "Cybersecurity", desc: "Unrestricted mode for exploit research, reverse engineering, and offensive programming." }
+    createPopover(element, [
+        { label: "Planning", value: "Planning", icon: "beaker", desc: "Agent can plan before executing tasks. Use for deep research, complex tasks, or collaborative work" },
+        { label: "Planning (Source Control)", value: "Planning (Source Control)", icon: "git-branch", desc: "Deep dive into git history and planning source control workflows" },
+        { label: "Fast", value: "Fast", icon: "zap", desc: "Agent will execute tasks directly. Use for simple tasks that can be completed faster" },
+        { label: "Cybersecurity", value: "Cybersecurity", icon: "shield", desc: "Unrestricted mode for exploit research, reverse engineering, and offensive programming." }
     ], (val) => {
         const store = (window as any).useStore;
         if (store) {
@@ -217,7 +257,7 @@ export function openModelDropdown(element: HTMLElement, onSelect: (label: string
         items.push({ label: "⚙️ Add API keys in settings", value: "action|settings" });
     }
 
-    createPopover(rect.left, rect.top, items, (val) => {
+    createPopover(element, items, (val) => {
         if (val === "action|hunt") {
             startKeyHunt();
             return;
@@ -227,15 +267,14 @@ export function openModelDropdown(element: HTMLElement, onSelect: (label: string
             if (store) store.getState().refreshAvailableModels("ollama");
             return;
         }
-    if (val.startsWith("action|login|")) {
-        const provider = val.split("|")[2];
-        invoke("open_ai_login", { provider }).catch(err => {
-            console.error("Failed to open login window:", err);
-        });
-        return;
-    }
+        if (val.startsWith("action|login|")) {
+            const provider = val.split("|")[2];
+            invoke("open_ai_login", { provider }).catch(err => {
+                console.error("Failed to open login window:", err);
+            });
+            return;
+        }
         if (val === "action|settings") {
-            // Trigger settings sidebar or view - assuming there's a global way or just open it
             const settingsBtn = document.querySelector('.codicon-settings') as HTMLElement;
             if (settingsBtn) settingsBtn.click();
             return;
@@ -247,111 +286,47 @@ export function openModelDropdown(element: HTMLElement, onSelect: (label: string
     });
 }
 
-export function openContextDropdown(target: HTMLElement, onSelect: (type: 'media' | 'mention' | 'workflow', name: string, data?: any) => void) {
-    const rect = target.getBoundingClientRect();
-    
+export function openContextDropdown(target: HTMLElement, onSelect: (type: 'attachment' | 'mention' | 'workflow', name: string, data?: any) => void) {
     const items = [
-        { label: 'Media', value: 'media', icon: 'file-media', desc: 'Attach an image or video' },
+        { label: 'Attachment', value: 'attachment', icon: 'file-media', desc: 'Attach any file (image, script, doc)' },
         { label: 'Mention', value: 'mention', icon: 'mention', desc: 'Reference a file or codebase entity' },
         { label: 'Workflow', value: 'workflow', icon: 'repo-forked', desc: 'Attach a task workflow or plan' },
         { label: 'Web Screenshot', value: 'browser', icon: 'browser', desc: 'Capture current webpage vision + DOM' }
     ];
 
-    const popover = document.createElement("div");
-    popover.id = "context-popover";
-    popover.style.position = "absolute";
-    popover.style.left = `${rect.left}px`;
-    popover.style.bottom = `${window.innerHeight - rect.top + 10}px`;
-    popover.style.background = "#252526";
-    popover.style.border = "1px solid #454545";
-    popover.style.borderRadius = "6px";
-    popover.style.boxShadow = "0 4px 14px rgba(0,0,0,0.5)";
-    popover.style.padding = "4px 0";
-    popover.style.zIndex = "9999";
-    popover.style.minWidth = "220px";
-    popover.style.color = "#ccc";
-    popover.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'system-ui', sans-serif";
-    popover.style.fontSize = "12px";
-
-    items.forEach(item => {
-        const row = document.createElement("div");
-        row.style.padding = "6px 12px";
-        row.style.cursor = "pointer";
-        row.style.display = "flex";
-        row.style.flexDirection = "column";
-
-        row.onmouseover = () => row.style.background = "#04395e";
-        row.onmouseout = () => row.style.background = "transparent";
-
-        row.onclick = (e) => {
-            e.stopPropagation();
-            popover.remove();
-            
-            if (item.value === 'media') {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = 'image/*,video/*';
-                input.onchange = (e) => {
-                    const file = (e.target as HTMLInputElement).files?.[0];
-                    if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (re) => onSelect('media', file.name, re.target?.result);
-                        reader.readAsDataURL(file);
-                    }
-                };
-                input.click();
-            } else if (item.value === 'mention') {
-                const name = prompt('Mention file or entity (e.g. src/main.tsx or @MainComponent):');
-                if (name) onSelect('mention', name);
-            } else if (item.value === 'workflow') {
-                const name = prompt('Enter workflow path or identifier:');
-                if (name) onSelect('workflow', name);
-            } else if (item.value === 'browser') {
-                const url = prompt('Enter URL to capture (leave empty for current browser view):');
-                invoke<any>("browser_capture_vision_context", { url: url || undefined })
-                    .then(data => {
-                        onSelect('media', `Web Screenshot: ${data.title}`, data.screenshot);
-                        // Also attach DOM summary as mention for context
-                        onSelect('mention', `DOM Summary for ${data.url}`, data.dom_summary);
-                    })
-                    .catch(e => {
-                        console.error("Browser capture failed:", e);
-                        alert("Failed to capture browser: " + e);
-                    });
-            }
-        };
-
-        const title = document.createElement("div");
-        title.style.display = "flex";
-        title.style.alignItems = "center";
-        title.style.gap = "8px";
-        title.innerHTML = `<i class="codicon codicon-${item.icon}"></i> <span>${item.label}</span>`;
-        title.style.color = "#fff";
-        row.appendChild(title);
-
-        if (item.desc) {
-            const desc = document.createElement("div");
-            desc.innerText = item.desc;
-            desc.style.fontSize = "11px";
-            desc.style.color = "#999";
-            desc.style.marginTop = "2px";
-            row.appendChild(desc);
+    createPopover(target, items, (val) => {
+        if (val === 'attachment') {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '*/*';
+            input.onchange = (e) => {
+                const file = (e.target as HTMLInputElement).files?.[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (re) => onSelect('attachment', file.name, reader.result);
+                    reader.readAsDataURL(file);
+                }
+            };
+            input.click();
+        } else if (val === 'mention') {
+            const name = prompt('Mention file or entity (e.g. src/main.tsx or @MainComponent):');
+            if (name) onSelect('mention', name);
+        } else if (val === 'workflow') {
+            const name = prompt('Enter workflow path or identifier:');
+            if (name) onSelect('workflow', name);
+        } else if (val === 'browser') {
+            const url = prompt('Enter URL to capture (leave empty for current browser view):');
+            invoke<any>("browser_capture_vision_context", { url: url || undefined })
+                .then(data => {
+                    onSelect('attachment', `Web Screenshot: ${data.title}`, data.screenshot);
+                    onSelect('mention', `DOM Summary for ${data.url}`, data.dom_summary);
+                })
+                .catch(e => {
+                    console.error("Browser capture failed:", e);
+                    alert("Failed to capture browser: " + e);
+                });
         }
-
-        popover.appendChild(row);
     });
-
-    document.body.appendChild(popover);
-
-    setTimeout(() => {
-        const closeListener = (e: MouseEvent) => {
-            if (!popover.contains(e.target as Node)) {
-                popover.remove();
-                document.removeEventListener("click", closeListener);
-            }
-        };
-        document.addEventListener("click", closeListener);
-    }, 0);
 }
 
 export async function handleAgentChat(inputElement: HTMLTextAreaElement) {
@@ -398,6 +373,7 @@ export async function loadProjectMemory(root: string): Promise<void> {
     if (!store) return;
 
     const candidateFiles = [
+        `${root}/MEMORY.md`,
         `${root}/AGENTS.md`,
         `${root}/CLAUDE.md`,
         `${root}/.agent/memory.md`,
@@ -410,18 +386,6 @@ export async function loadProjectMemory(root: string): Promise<void> {
     const sections: string[] = [];
 
     // Execute Tool via Backend
-    const executeTool = async (name: string, args: any) => {
-        const { updateAgentStepStatus } = store.getState();
-        try {
-            const result = await invoke<string>("execute_agent_tool", { name, args });
-            updateAgentStepStatus(name, 'success', result);
-            return result;
-        } catch (e: any) {
-            updateAgentStepStatus(name, 'error', e.toString());
-            throw e;
-        }
-    };
-
     for (const filePath of candidateFiles) {
         try {
             const content = await invoke<string>("read_file", { path: filePath });
@@ -447,7 +411,7 @@ export async function loadProjectMemory(root: string): Promise<void> {
 // ---------------------------------------------------------------------------
 function buildIdeContext(): string {
     const store = (window as any).useStore;
-    if (!store) return 'You are Antigravity, an AI coding agent embedded inside a VSCode-like IDE.';
+    if (!store) return 'You are an AI coding agent embedded inside a VSCode-like IDE.';
 
     const storeState = store.getState();
     const activeRoot = storeState.activeRoot || '';
@@ -459,7 +423,7 @@ function buildIdeContext(): string {
     const activeEditorContent: string = activeTab?.content || '';
 
     const parts: string[] = [
-        `You are Antigravity, an AI coding agent embedded inside a VSCode-like IDE.`,
+        `You are an AI coding agent embedded inside a VSCode-like IDE.`,
     ];
 
     if (activeRoot) {
@@ -492,7 +456,7 @@ function buildIdeContext(): string {
         parts.push(`\n${projectMemory}`);
     }
 
-    // Append user-attached context items (Media, Mentions, Workflows)
+    // Append user-attached context items (Attachments, Mentions, Workflows)
     const context = storeState.attachedContext || [];
     if (context.length > 0) {
         parts.push(`\n## Attached Context`);
@@ -501,8 +465,8 @@ function buildIdeContext(): string {
                 parts.push(`- Referenced File/Entity: \`${c.name}\``);
             } else if (c.type === 'workflow') {
                 parts.push(`- Related Workflow/Plan: \`${c.name}\``);
-            } else if (c.type === 'media') {
-                parts.push(`- Attached Image/Video: \`${c.name}\` (Base64 data included separately by vision-capable models if available)`);
+            } else if (c.type === 'attachment') {
+                parts.push(`- Attached File/Image: \`${c.name}\` (Base64 data included separately by vision-capable models if available)`);
                 // Note: If we had a vision model adapter, we'd pass the actual data bytes here.
                 // For now, we reference it in the metadata.
             }
@@ -563,15 +527,23 @@ export async function sendAgentMessage(userPrompt: string, _onUpdate: (msg: stri
         ...agentMessages.map((m: any) => {
             let content: any = m.content || "";
             
-            // If message has media context, convert to multi-modal parts
-            const mediaContext = m.context?.filter((c: any) => c.type === 'media' && c.data);
-            if (mediaContext && mediaContext.length > 0) {
+            // If message has attachment context, convert to multi-modal parts for images
+            const attachmentContext = m.context?.filter((c: any) => c.type === 'attachment' && c.data);
+            if (attachmentContext && attachmentContext.length > 0) {
                 const parts: any[] = [{ type: 'text', text: content }];
-                mediaContext.forEach((mc: any) => {
-                    parts.push({ 
-                        type: 'image_url', 
-                        image_url: { url: mc.data.startsWith('data:') ? mc.data : `data:image/jpeg;base64,${mc.data}` } 
-                    });
+                attachmentContext.forEach((ac: any) => {
+                    // Only images are sent as multimodal parts for now. 
+                    // Other files are just mentioned by name in the text if we want, 
+                    // but for general files we might want to just include their reference.
+                    if (ac.data.startsWith('data:image/')) {
+                        parts.push({ 
+                            type: 'image_url', 
+                            image_url: { url: ac.data } 
+                        });
+                    } else {
+                        // For non-image files, we prepend an "Attached file: [name]" to the content
+                        parts[0].text = `[Attached file: ${ac.name}]\n${parts[0].text}`;
+                    }
                 });
                 content = parts;
             }
@@ -600,10 +572,41 @@ export async function sendAgentMessage(userPrompt: string, _onUpdate: (msg: stri
                 ollama_url: store.getState().ollamaUrl
             }
         });
+        // Auto-log a task summary to MEMORY.md after every successful AI response
+        logTaskToMemory(userPrompt).catch(() => {});
     } catch (e: any) {
         console.error("Agent chat failed:", e);
         setAiStatus('dead');
         throw e;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-log helper — appends a compact task entry to MEMORY.md.
+// Called automatically after each AI response. Errors are silently swallowed
+// so they never interrupt the chat UX.
+// ---------------------------------------------------------------------------
+export async function logTaskToMemory(userPrompt: string): Promise<void> {
+    const store = (window as any).useStore;
+    if (!store) return;
+    const { activeRoot, agentMessages } = store.getState();
+    if (!activeRoot) return;
+
+    // Grab the last assistant message as a brief summary
+    const msgs: any[] = agentMessages || [];
+    const lastAssistant = [...msgs].reverse().find((m: any) => m.role === 'assistant');
+    const reply = lastAssistant?.content?.trim() || '';
+    if (!reply) return;
+
+    const summary = [
+        `**User:** ${userPrompt.slice(0, 120)}${userPrompt.length > 120 ? '…' : ''}`,
+        `**AI:** ${reply.slice(0, 280)}${reply.length > 280 ? '…' : ''}`,
+    ].join('\n');
+
+    try {
+        await invoke('update_project_memory', { content: summary });
+    } catch (_) {
+        // silently ignore — memory is best-effort
     }
 }
 
@@ -758,7 +761,7 @@ async function processSlashCommand(prompt: string): Promise<boolean> {
         }
 
         case '/help': {
-            const helpMsg = `### Antigravity Slash Commands
+            const helpMsg = `### AI Agent Slash Commands
 
 **General**
 - \`/clear\` — Wipe current chat history
@@ -776,8 +779,30 @@ async function processSlashCommand(prompt: string): Promise<boolean> {
 
 **Memory**
 - \`/memory\` — Show loaded project memory (AGENTS.md / CLAUDE.md)
-- \`/memory reload\` — Re-read memory files from disk`;
+- \`/memory reload\` — Re-read memory files from disk
+- \`/learn <text>\` — Manually write a note to MEMORY.md (permanent)`;
             addAgentMessage('assistant', helpMsg);
+            return true;
+        }
+
+        case '/learn': {
+            if (!activeRoot) {
+                addAgentMessage('assistant', '❌ No project root open — cannot write to MEMORY.md.');
+                return true;
+            }
+            const summary = args.trim();
+            if (!summary) {
+                addAgentMessage('assistant', '**Usage:** `/learn <what you want the AI to remember>`\n\nExample: `/learn Always use Zod for input validation in this project`');
+                return true;
+            }
+            addAgentMessage('assistant', '💾 Writing to MEMORY.md...');
+            try {
+                await invoke('update_project_memory', { content: summary });
+                await loadProjectMemory(activeRoot);
+                store.getState().updateLastAgentMessage(`✅ Memory updated! Added to \`MEMORY.md\`:\n\n> ${summary}`);
+            } catch (err: any) {
+                store.getState().updateLastAgentMessage(`❌ Failed to write memory: ${err.message || err}`);
+            }
             return true;
         }
 
@@ -979,3 +1004,36 @@ export async function startKeyHunt() {
 (window as any).startKeyHunt = startKeyHunt;
 
 
+
+// Global Listeners
+listen('ai-file-proposal', async (event: { payload: { path: string, content: string, description: string } }) => {
+    const { path, content, description } = event.payload;
+    
+    try {
+        // Get old content from the backend to compute diff
+        const result = await invoke('propose_file_change', { 
+            path, 
+            content, 
+            description: description || 'AI proposed changes' 
+        }) as PendingChange;
+        
+        useStore.getState().proposePendingChange(result);
+    } catch (error) {
+        console.error('Failed to handle file proposal:', error);
+    }
+});
+
+listen('ai-tool-call', (event: { payload: { name: string, args: string } | any }) => {
+    // Only process if payload structure matches
+    if (event.payload && event.payload.name) {
+        const { updateAgentStepStatus } = useStore.getState();
+        updateAgentStepStatus(event.payload.name, 'running', 'Executing...');
+    }
+});
+
+listen('ai-tool-result', (event: { payload: { name: string, result: string } | any }) => {
+    if (event.payload && event.payload.name) {
+        const { updateAgentStepStatus } = useStore.getState();
+        updateAgentStepStatus(event.payload.name, 'success', event.payload.result);
+    }
+});

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
@@ -13,13 +13,34 @@ pub struct ToolDefinition {
 }
 
 pub struct AiTools {
-    root_path: PathBuf,
+    root_path: Arc<Mutex<PathBuf>>,
     browser_state: Arc<crate::browser::BrowserState>,
+    app_handle: Arc<Mutex<Option<tauri::AppHandle>>>,
 }
 
 impl AiTools {
     pub fn new(root_path: PathBuf, browser_state: Arc<crate::browser::BrowserState>) -> Self {
-        Self { root_path, browser_state }
+        Self { 
+            root_path: Arc::new(Mutex::new(root_path)), 
+            browser_state,
+            app_handle: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn set_app_handle(&self, handle: tauri::AppHandle) {
+        if let Ok(mut h) = self.app_handle.lock() {
+            *h = Some(handle);
+        }
+    }
+
+    pub fn set_root_path(&self, root_path: PathBuf) {
+        if let Ok(mut current) = self.root_path.lock() {
+            *current = root_path;
+        }
+    }
+
+    pub fn get_root_path(&self) -> PathBuf {
+        self.root_path.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     pub fn list_tools(&self) -> Vec<ToolDefinition> {
@@ -60,7 +81,7 @@ impl AiTools {
                 }),
             },
             ToolDefinition {
-                name: "list_dir".to_string(),
+                name: "list_files".to_string(),
                 description: "List files in a directory".to_string(),
                 input_schema: serde_json::json!({
                     "type": "object",
@@ -258,6 +279,22 @@ impl AiTools {
                 input_schema: json!({"type": "object", "properties": {}}),
             },
             ToolDefinition {
+                name: "editor_open_file".into(),
+                description: "Open a file in the main editor".into(),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "The relative path to the file to open"}
+                    },
+                    "required": ["path"]
+                }),
+            },
+            ToolDefinition {
+                name: "editor_get_active_file".into(),
+                description: "Get the path of the currently active/focused file in the editor".into(),
+                input_schema: json!({"type": "object", "properties": {}}),
+            },
+            ToolDefinition {
                 name: "find_api_keys".into(),
                 description: "Search the codebase for leaked API keys using common dorking patterns (OpenAI, GitHub, Google)".into(),
                 input_schema: json!({"type": "object", "properties": {}}),
@@ -270,7 +307,7 @@ impl AiTools {
             "view_file" => self.read_file(arguments),
             "write_to_file" => self.write_file(arguments),
             "delete_file" => self.delete_file(arguments),
-            "list_dir" => self.list_files(arguments),
+            "list_files" => self.list_files(arguments),
             "run_command" => self.run_command(arguments),
             "search_files" => self.search_files(arguments),
             "grep" => self.grep(arguments),
@@ -283,6 +320,8 @@ impl AiTools {
             "browser_read_dom" => self.browser_read_dom(arguments),
             "browser_close" => self.browser_close(arguments),
             "find_api_keys" => self.find_api_keys(arguments),
+            "editor_open_file" => self.editor_open_file(arguments),
+            "editor_get_active_file" => self.editor_get_active_file(arguments),
             "code_generation" => Ok(serde_json::json!({"result": "Code generated based on specification. (Mock implementation)"})),
             "generate_0day_exploit" => Ok(serde_json::json!({"status": "Exploit generated and verified in sandbox environment. (Mock implementation)"})),
             "reverse_engineer_firmware" => Ok(serde_json::json!({"analysis": "Firmware unpacked. No critical vulnerabilities found in first pass. (Mock implementation)"})),
@@ -300,10 +339,12 @@ impl AiTools {
             .or_else(|| args.get("path"))
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing TargetFile"))?;
-        let full_path = self.root_path.join(path_str);
+        
+        let root = self.root_path.lock().map_err(|_| anyhow!("Failed to lock root_path"))?;
+        let full_path = root.join(path_str);
 
         // Security check: ensure path is within root
-        if !full_path.starts_with(&self.root_path) {
+        if !full_path.starts_with(&*root) {
             return Err(anyhow!("Access denied: path outside project root"));
         }
 
@@ -322,9 +363,11 @@ impl AiTools {
             .or_else(|| args.get("content"))
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing CodeContent"))?;
-        let full_path = self.root_path.join(path_str);
+        
+        let root = self.root_path.lock().map_err(|_| anyhow!("Failed to lock root_path"))?;
+        let full_path = root.join(path_str);
 
-        if !full_path.starts_with(&self.root_path) {
+        if !full_path.starts_with(&*root) {
             return Err(anyhow!("Access denied: path outside project root"));
         }
 
@@ -340,9 +383,11 @@ impl AiTools {
             .get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("Missing path"))?;
-        let full_path = self.root_path.join(path_str);
+        
+        let root = self.root_path.lock().map_err(|_| anyhow!("Failed to lock root_path"))?;
+        let full_path = root.join(path_str);
 
-        if !full_path.starts_with(&self.root_path) {
+        if !full_path.starts_with(&*root) {
             return Err(anyhow!("Access denied: path outside project root"));
         }
 
@@ -353,9 +398,11 @@ impl AiTools {
     fn list_files(&self, args: Value) -> Result<Value> {
         let path_str = args.get("path").and_then(|v| v.as_str()).unwrap_or(".");
         let recursive = args.get("recursive").and_then(|v| v.as_bool()).unwrap_or(false);
-        let full_path = self.root_path.join(path_str);
+        
+        let root = self.root_path.lock().map_err(|_| anyhow!("Failed to lock root_path"))?;
+        let full_path = root.join(path_str);
 
-        if !full_path.starts_with(&self.root_path) {
+        if !full_path.starts_with(&*root) {
             return Err(anyhow!("Access denied: path outside project root"));
         }
 
@@ -363,7 +410,8 @@ impl AiTools {
         if recursive {
             use walkdir::WalkDir;
             for entry in WalkDir::new(full_path).max_depth(3).into_iter().filter_map(|e| e.ok()) {
-                let rel_path = entry.path().strip_prefix(&self.root_path)?.to_string_lossy().to_string();
+                let rel_path = entry.path().strip_prefix(&*root)?
+                    .to_string_lossy().to_string();
                 let is_dir = entry.file_type().is_dir();
                 files.push(serde_json::json!({
                     "path": rel_path,
@@ -387,15 +435,16 @@ impl AiTools {
     fn run_command(&self, args: Value) -> Result<Value> {
         let command = args.get("command").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing command"))?;
         
+        let root = self.root_path.lock().map_err(|_| anyhow!("Failed to lock root_path"))?;
         let output = if cfg!(target_os = "windows") {
             std::process::Command::new("powershell")
                 .args(&["-Command", command])
-                .current_dir(&self.root_path)
+                .current_dir(&*root)
                 .output()?
         } else {
             std::process::Command::new("sh")
                 .args(&["-c", command])
-                .current_dir(&self.root_path)
+                .current_dir(&*root)
                 .output()?
         };
 
@@ -414,14 +463,15 @@ impl AiTools {
         
         let mut results = Vec::new();
         use walkdir::WalkDir;
-        for entry in WalkDir::new(&self.root_path).into_iter().filter_map(|e| e.ok()) {
+        let root = self.root_path.lock().map_err(|_| anyhow!("Failed to lock root_path"))?;
+        for entry in WalkDir::new(&*root).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_file() {
                 let content = fs::read_to_string(entry.path());
                 if let Ok(content) = content {
                     for (i, line) in content.lines().enumerate() {
                         if line.contains(query) {
                             results.push(serde_json::json!({
-                                "file": entry.path().strip_prefix(&self.root_path)?.to_string_lossy().to_string(),
+                                "file": entry.path().strip_prefix(&*root)?.to_string_lossy().to_string(),
                                 "line": i + 1,
                                 "match": line.trim()
                             }));
@@ -532,8 +582,9 @@ impl AiTools {
         let github_regex = regex::Regex::new(r"gh[pousr]_[a-zA-Z0-9]+")?;
         let google_regex = regex::Regex::new(r"AIza[0-9A-Za-z-_]{35}")?;
         
+        let root = self.root_path.lock().map_err(|e| anyhow!("Lock error: {}", e))?;
         use walkdir::WalkDir;
-        for entry in WalkDir::new(&self.root_path).into_iter().filter_map(|e| e.ok()) {
+        for entry in WalkDir::new(&*root).into_iter().filter_map(|e| e.ok()) {
             if entry.file_type().is_file() {
                 let ext = entry.path().extension().and_then(|s| s.to_str()).unwrap_or("");
                 if extensions.contains(&ext) || ext.is_empty() {
@@ -557,7 +608,7 @@ impl AiTools {
                              if found {
                                  results.push(serde_json::json!({
                                      "provider": provider,
-                                     "file": entry.path().strip_prefix(&self.root_path)?.to_string_lossy().to_string(),
+                                     "file": entry.path().strip_prefix(&*root)?.to_string_lossy().to_string(),
                                      "line": i + 1,
                                      "context": line.trim()
                                  }));
@@ -577,15 +628,16 @@ impl AiTools {
         let query = args.get("query").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing query"))?;
         let path = args.get("path").and_then(|v| v.as_str()).unwrap_or(".");
         
+        let root = self.root_path.lock().map_err(|e| anyhow!("Lock error: {}", e))?;
         let output = if cfg!(target_os = "windows") {
              std::process::Command::new("powershell")
                 .args(&["-Command", &format!("Select-String -Path '{}' -Pattern '{}' -Recursive", path, query)])
-                .current_dir(&self.root_path)
+                .current_dir(&*root)
                 .output()?
         } else {
             std::process::Command::new("grep")
                 .args(&["-r", "-n", query, path])
-                .current_dir(&self.root_path)
+                .current_dir(&*root)
                 .output()?
         };
 
@@ -598,7 +650,48 @@ impl AiTools {
 
     fn terminal_send_data(&self, args: Value) -> Result<Value> {
         let data = args.get("data").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing data"))?;
-        // For now, redirecting to run_command as a fallback for the "send data" flow
-        self.run_command(json!({"command": data}))
+        let term_id = args.get("term_id").and_then(|v| v.as_str());
+
+        let handle_lock = self.app_handle.lock().map_err(|_| anyhow!("Lock error"))?;
+        if let Some(handle) = handle_lock.as_ref() {
+            use tauri::Emitter;
+            handle.emit("terminal-input", json!({
+                "data": data,
+                "term_id": term_id
+            })).map_err(|e| anyhow!("Failed to emit event: {}", e))?;
+            Ok(json!({"status": "success", "message": "Data sent to terminal"}))
+        } else {
+            // Fallback
+            self.run_command(json!({"command": data}))
+        }
+    }
+
+    fn editor_open_file(&self, args: Value) -> Result<Value> {
+        let path = args.get("path").and_then(|v| v.as_str()).ok_or_else(|| anyhow!("Missing path"))?;
+        let handle_lock = self.app_handle.lock().map_err(|_| anyhow!("Lock error"))?;
+        if let Some(handle) = handle_lock.as_ref() {
+            use tauri::Emitter;
+            handle.emit("open-file", json!({ "path": path }))
+                .map_err(|e| anyhow!("Failed to emit event: {}", e))?;
+            Ok(json!({"status": "success", "message": format!("Opened {}", path)}))
+        } else {
+            Err(anyhow!("App handle not available"))
+        }
+    }
+
+    fn editor_get_active_file(&self, _args: Value) -> Result<Value> {
+        let handle_lock = self.app_handle.lock().map_err(|_| anyhow!("Lock error"))?;
+        if let Some(handle) = handle_lock.as_ref() {
+            use tauri::Manager;
+            let state: tauri::State<crate::EditorState> = handle.state();
+            let active_path = state.active_path.lock().map_err(|_| anyhow!("Lock error"))?;
+            
+            match active_path.as_ref() {
+                Some(path) => Ok(json!({ "status": "success", "path": path })),
+                None => Ok(json!({ "status": "not_found", "message": "No active file" }))
+            }
+        } else {
+            Err(anyhow!("App handle not available"))
+        }
     }
 }

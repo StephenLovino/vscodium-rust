@@ -166,7 +166,12 @@ impl Sentient {
 
     pub fn set_app_handle(&self, handle: AppHandle) {
         let mut h = self.app_handle.lock().unwrap();
-        *h = Some(handle);
+        *h = Some(handle.clone());
+        self.ai_tools.set_app_handle(handle);
+    }
+
+    pub fn set_root_path(&self, root_path: PathBuf) {
+        self.ai_tools.set_root_path(root_path);
     }
 
     /// Main autonomous reasoning loop with iterative tool invocation and task planning.
@@ -190,19 +195,103 @@ impl Sentient {
         self.stop_signal.load(Ordering::SeqCst)
     }
 
+
+
+    pub async fn check_ollama_status(&self) -> Result<bool> {
+        let url = {
+            let u = self.ollama_url.lock().unwrap();
+            u.clone()
+        };
+        // Use a 2-second timeout for status check
+        let resp = self.client.get(format!("{}/api/tags", url))
+            .timeout(std::time::Duration::from_secs(2))
+            .send().await;
+        
+        Ok(resp.is_ok() && resp.unwrap().status().is_success())
+    }
+
+    pub async fn pull_model(&self, name: &str) -> Result<()> {
+        let url = {
+            let u = self.ollama_url.lock().unwrap();
+            u.clone()
+        };
+        
+        let payload = json!({ "name": name, "stream": false });
+        let resp = self.client.post(format!("{}/api/pull", url))
+            .json(&payload)
+            .send().await?;
+            
+        if resp.status().is_success() {
+            Ok(())
+        } else {
+            Err(anyhow!("Failed to pull model: {}", resp.status()))
+        }
+    }
+
     #[instrument(skip(self, req))]
     pub async fn autonomous_loop(&self, req: AiRequest) -> Result<String> {
 
         let request_id = uuid::Uuid::new_v4().to_string().chars().take(8).collect::<String>();
         println!("[{}] AI Loop starting for provider: {}, model: {}", request_id, req.provider, req.model);
-        let base_prompt = "You are Antigravity, a high-performance, autonomous AI coding agent. \
+        let (project_path, project_name, files_list) = {
+            let root_inner = self.ai_tools.get_root_path();
+            let path = root_inner.to_string_lossy().to_string();
+            let name = root_inner.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "this project".to_string());
+            let mut files = Vec::new();
+            if let Ok(entries) = std::fs::read_dir(&root_inner) {
+                for entry in entries.flatten() {
+                    if let Ok(name) = entry.file_name().into_string() {
+                        files.push(name);
+                    }
+                }
+            }
+            files.sort();
+            (path, name, files.join(", "))
+        };
+        let root = self.ai_tools.get_root_path();
+
+        let model_display_name = if req.model.to_lowercase().contains("gemini") {
+            format!("Gemini ({})", req.model)
+        } else if req.model.to_lowercase().contains("claude") {
+            format!("Claude ({})", req.model)
+        } else if req.model.to_lowercase().contains("gpt") {
+            format!("GPT ({})", req.model)
+        } else {
+            req.model.clone()
+        };
+
+        let mut project_memory = String::new();
+        let memory_files = ["MEMORY.md", "AGENTS.md", "CLAUDE.md", ".agent/memory.md"];
+        for file_name in memory_files {
+            let memory_path = root.join(file_name);
+            if memory_path.exists() {
+                if let Ok(content) = std::fs::read_to_string(&memory_path) {
+                    project_memory.push_str(&format!("\n### Project Memory: {}\n{}\n", file_name, content));
+                }
+            }
+        }
+
+        let base_prompt = format!(
+            "You are a high-performance, autonomous AI coding agent powered by {}. \
             Your goal is to assist the user with complex engineering tasks, research, and project maintenance. \
+            YOU ARE FULLY AGENTIC: If the user mentions a file or asks a question that requires codebase knowledge, USE TOOLS (`list_files`, `view_file`, etc.) IMMEDIATELY AND AUTONOMOUSLY. \
+            Do not ask for permission to read files. If the user says 'read readme.md', just call `view_file`. \
+            CURRENT PROJECT: {} (Path: {}) \
+            TOP-LEVEL FILES: {} \
+            {} \
             PROJECT AWARENESS: Always look for project-specific automation in `.agent/workflows/` or `.agents/workflows/`. \
             SKILL CATALOG: You have access to over 500+ specialized master skills documented in `SKILLS.md`. \
-            If a complex task (e.g. 3D Web, Pentesting, Data Science) is requested, check `SKILLS.md` for the appropriate methodology. \
-            SLASH COMMANDS: You support `/clear`, `/settings`, `/workflows`, and `/help` for local control. \
-            CAPABILITIES: You can edit files, run terminal commands, browse the web with full DOM control, and use available MCP servers. \
-            ALWAYS use the correct tool names: `write_to_file`, `view_file`, `list_files`, `run_command`, `browser_open`, etc.";
+            CAPABILITIES: You can edit files, run terminal commands, browse the web, and use MCP servers. \
+            ALWAYS use the correct tool names and arguments: \
+            - `list_files`: `{{\"path\": \".\", \"recursive\": false}}` \
+            - `view_file`: `{{\"TargetFile\": \"path/to/file.rs\"}}` \
+            - `write_to_file`: `{{\"TargetFile\": \"path/to/file.rs\", \"CodeContent\": \"...\"}}` \
+            - `run_command`: `{{\"command\": \"cargo check\"}}` \
+            - `browser_open`: {{}}",
+            model_display_name, project_name, project_path, files_list, project_memory
+        );
 
         let mut messages = req.messages.clone();
 
@@ -320,7 +409,7 @@ impl Sentient {
                 system_msg = "You are Antigravity, a helpful assistant.".to_string();
             }
 
-            let filtered_messages: Vec<Value> = messages.iter().filter_map(|m| {
+            let _filtered_messages: Vec<Value> = messages.iter().filter_map(|m| {
                 if m.role == "system" {
                     None
                 } else {
@@ -330,7 +419,7 @@ impl Sentient {
                         None => json!(null),
                     };
                     Some(json!({
-                        "role": m.role,
+                        "role": &m.role,
                         "content": content
                     }))
                 }
@@ -599,10 +688,22 @@ impl Sentient {
                 for tool_call in tool_calls {
                     self.emit_event("ai-tool-call", json!({ "name": tool_call.function.name, "args": tool_call.function.arguments }));
                     
-                    let tool_result = if tool_call.function.name == "terminal_send_data" {
-                        let args: Value = serde_json::from_str(&tool_call.function.arguments).unwrap_or(json!({}));
-                        self.emit_event("terminal-input", args);
-                        Ok(json!({ "status": "success", "message": "Command sent to terminal" }))
+                    let tool_result = if tool_call.function.name == "write_to_file" {
+                        // INTERCEPT: Propose change instead of writing
+                        if let Ok(args) = serde_json::from_str::<Value>(&tool_call.function.arguments) {
+                            let path = args.get("TargetFile").or(args.get("path")).and_then(|v| v.as_str()).unwrap_or("");
+                            let content = args.get("CodeContent").and_then(|v| v.as_str()).unwrap_or("");
+                            
+                            self.emit_event("ai-file-proposal", json!({
+                                "path": path,
+                                "content": content,
+                                "description": "AI proposed changes"
+                            }));
+
+                            Ok(json!({"status": "SUCCESS: Change proposed for user review. PLEASE NOTE: The file has NOT been written yet. Do not attempt to run commands that depend on this content until the user accepts it."}))
+                        } else {
+                            Err(anyhow!("Invalid arguments for write_to_file"))
+                        }
                     } else {
                         self.tool_invoker.execute_tool(&tool_call.function.name, &tool_call.function.arguments).await
                     };
