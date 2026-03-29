@@ -21,7 +21,6 @@ const ActivityBar: React.FC = () => {
         { id: 'extensions-view', icon: 'extensions', title: 'Extensions' },
         { id: 'specs-view', icon: 'book', title: 'Specs' },
         { id: 'agent-view', icon: 'sparkle', title: 'Agent' },
-        { id: 'planning-view', icon: 'checklist', title: 'Workflow & Planning' },
         { id: 'mobile-view', icon: 'device-mobile', title: 'Mobile Emulators (Android & iOS)' },
     ];
 

@@ -9,8 +9,6 @@ const TerminalSidebar: React.FC = () => {
     const renameGroup = useStore(state => state.renameTerminalGroup);
     const closeGroup = useStore(state => state.closeTerminalGroup);
     const splitTerminal = useStore(state => state.splitTerminal);
-    const agentMessages = useStore(state => state.agentMessages);
-    const latestAgentMessage = [...agentMessages].reverse().find(m => m.role === 'assistant' && (m.steps || m.artifacts));
     
     const [menuState, setMenuState] = useState({ visible: false, x: 0, y: 0, groupId: '' });
     const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -83,40 +81,35 @@ const TerminalSidebar: React.FC = () => {
                 onClose={() => setMenuState({ ...menuState, visible: false })}
             />
 
-            {/* Sidebar Header */}
-            <div className="pane-header" style={{ height: '35px', padding: '0 8px 0 16px', borderBottom: '1px solid var(--vscode-panel-border, #454545)', borderTop: 'none' }}>
-                <span style={{ flex: 1, fontSize: '11px', fontWeight: 600 }}>TERMINALS</span>
-                <div className="panel-toolbar" style={{ gap: '2px' }}>
-                    <div className="toolbar-item" style={{ width: '24px', height: '24px' }} onClick={() => (window as any).executeCommand('terminal.new')}>
-                        <i className="codicon codicon-add" style={{ fontSize: '14px' }}></i>
-                    </div>
-                    <div className="toolbar-item" style={{ width: '24px', height: '24px' }}>
-                        <i className="codicon codicon-chevron-down" style={{ fontSize: '14px' }}></i>
-                    </div>
-                </div>
-            </div>
-
             {/* Terminal List */}
-            <div className="terminal-groups-section" style={{ flex: 1, overflowY: 'auto' }}>
+            <div className="terminal-groups-section" style={{ 
+                flex: 1, 
+                overflowY: 'auto',
+                padding: '4px 0'
+            }}>
                 {groups.map((group) => (
                     <div 
                         key={group.id}
                         onClick={() => setActiveGroup(group.id)}
                         onContextMenu={(e) => handleContextMenu(e, group.id)}
-                        className={`pane-item ${activeGroupId === group.id ? 'active' : ''}`}
+                        className={`terminal-group-item ${activeGroupId === group.id ? 'active' : ''}`}
                         style={{ 
                             height: '22px',
-                            padding: '0 8px 0 16px',
+                            padding: '0 12px',
                             fontSize: '11px',
                             display: 'flex',
                             alignItems: 'center',
                             cursor: 'pointer',
-                            background: activeGroupId === group.id ? 'var(--vscode-list-activeSelectionBackground)' : 'transparent',
-                            color: activeGroupId === group.id ? 'var(--vscode-list-activeSelectionForeground)' : 'inherit'
+                            position: 'relative',
+                            background: activeGroupId === group.id ? 'var(--vscode-list-activeSelectionBackground, #04395e)' : 'transparent',
+                            color: activeGroupId === group.id ? 'var(--vscode-list-activeSelectionForeground, #ffffff)' : 'var(--vscode-foreground, #cccccc)',
                         }}
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, overflow: 'hidden' }}>
-                            <i className="codicon codicon-terminal" style={{ fontSize: '12px', opacity: 0.8 }}></i>
+                            <i className="codicon codicon-terminal" style={{ 
+                                fontSize: '13px', 
+                                opacity: activeGroupId === group.id ? 1 : 0.6
+                            }}></i>
                             {renamingId === group.id ? (
                                 <input 
                                     autoFocus
@@ -132,24 +125,55 @@ const TerminalSidebar: React.FC = () => {
                                         color: 'var(--vscode-input-foreground, #cccccc)',
                                         border: '1px solid var(--vscode-focusBorder, #007acc)',
                                         fontSize: '11px',
-                                        padding: '0 2px',
+                                        padding: '0 4px',
                                         width: '100%',
                                         outline: 'none',
                                         height: '18px'
                                     }}
                                 />
                             ) : (
-                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.name}</span>
+                                <span style={{ 
+                                    flex: 1, 
+                                    overflow: 'hidden', 
+                                    textOverflow: 'ellipsis', 
+                                    whiteSpace: 'nowrap'
+                                }}>{group.name}</span>
                             )}
                         </div>
                         
-                        <div className="tab-actions" style={{ display: 'flex', gap: '4px', opacity: activeGroupId === group.id ? 1 : 0, transition: 'opacity 0.1s' }}>
-                            <i className="codicon codicon-split-horizontal" style={{ fontSize: '12px', padding: '2px' }} onClick={(e) => { e.stopPropagation(); splitTerminal(group.id, group.activeInstanceId); }} />
-                            <i className="codicon codicon-trash" style={{ fontSize: '12px', padding: '2px' }} onClick={(e) => { e.stopPropagation(); closeGroup(group.id); }} />
+                        <div className="tab-actions" style={{ 
+                            display: 'flex', 
+                            gap: '4px', 
+                            opacity: activeGroupId === group.id ? 1 : 0, 
+                            marginLeft: '4px'
+                        }}>
+                            <i className="codicon codicon-split-horizontal" style={{ fontSize: '12px', cursor: 'pointer', opacity: 0.7 }} 
+                               onClick={(e) => { e.stopPropagation(); splitTerminal(group.id, group.activeInstanceId); }} 
+                               title="Split Terminal"
+                            />
+                            <i className="codicon codicon-close" style={{ fontSize: '12px', cursor: 'pointer', opacity: 0.7 }} 
+                               onClick={(e) => { e.stopPropagation(); closeGroup(group.id); }} 
+                               title="Close Terminal Group"
+                            />
                         </div>
                     </div>
                 ))}
             </div>
+            
+            <style>{`
+                .terminal-group-item:hover {
+                    background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
+                }
+                .terminal-group-item.active:hover {
+                    background: var(--vscode-list-activeSelectionBackground, #04395e);
+                }
+                .terminal-group-item:hover .tab-actions {
+                    opacity: 1 !important;
+                }
+                .tab-actions i:hover {
+                    opacity: 1 !important;
+                }
+            `}</style>
         </div>
     );
 };

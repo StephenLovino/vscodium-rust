@@ -41,14 +41,16 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose, visib
                 position: 'fixed',
                 top: y,
                 left: x,
-                zIndex: 1000,
-                minWidth: '160px',
-                background: 'var(--vscode-menu-background, #252526)',
-                color: 'var(--vscode-menu-selectionForeground, #cccccc)',
-                border: '1px solid var(--vscode-menu-border, #454545)',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
-                padding: '4px 0',
-                borderRadius: '3px'
+                zIndex: 10000,
+                minWidth: '200px',
+                background: 'rgba(35, 35, 35, 0.85)',
+                backdropFilter: 'blur(15px)',
+                color: '#fff',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                boxShadow: '0 10px 30px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+                padding: '6px',
+                borderRadius: '10px',
+                animation: 'menuIn 0.15s ease-out'
             }}
         >
             {options.map((option, index) => (
@@ -62,27 +64,39 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, options, onClose, visib
                     style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
-                        padding: '6px 12px',
+                        gap: '10px',
+                        padding: '8px 12px',
                         cursor: 'pointer',
-                        fontSize: '12px',
-                        color: option.danger ? '#f14c4c' : 'inherit'
+                        fontSize: '13px',
+                        fontWeight: 500,
+                        borderRadius: '6px',
+                        color: option.danger ? '#f87171' : 'rgba(255, 255, 255, 0.85)',
+                        transition: 'all 0.1s'
                     }}
                     onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'var(--vscode-menu-selectionBackground, #094771)';
-                        e.currentTarget.style.color = 'var(--vscode-menu-selectionForeground, #ffffff)';
+                        e.currentTarget.style.background = option.danger ? 'rgba(248, 113, 113, 0.1)' : 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.color = option.danger ? '#f87171' : '#fff';
+                        e.currentTarget.style.transform = 'translateX(2px)';
                     }}
                     onMouseLeave={(e) => {
                         e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = option.danger ? '#f14c4c' : 'inherit';
+                        e.currentTarget.style.color = option.danger ? '#f87171' : 'rgba(255, 255, 255, 0.85)';
+                        e.currentTarget.style.transform = 'translateX(0)';
                     }}
                 >
-                    {option.icon && <i className={`codicon ${option.icon}`} style={{ fontSize: '14px' }}></i>}
+                    {option.icon && <i className={`codicon ${option.icon}`} style={{ fontSize: '14px', opacity: 0.8 }}></i>}
                     <span style={{ flex: 1 }}>{option.label}</span>
                 </div>
             ))}
+            <style>{`
+                @keyframes menuIn {
+                    from { opacity: 0; transform: translateY(5px) scale(0.98); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
+                }
+            `}</style>
         </div>
     );
 };
 
 export default ContextMenu;
+

@@ -111,13 +111,6 @@ const Workbench: React.FC = () => {
                                         />
                                     </div>
                                 ))}
-                                {tabs.length === 0 && !activeRoot && (
-                                    <div className="tab active" style={{ display: 'flex', alignItems: 'center' }}>
-                                        <i className="codicon codicon-markdown" style={{ marginRight: '6px', fontSize: '14px', color: '#1f9ceb' }} />
-                                        Welcome
-                                        <i className="codicon codicon-close" style={{ marginLeft: '10px', fontSize: '14px', cursor: 'pointer' }} />
-                                    </div>
-                                )}
                             </div>
 
                             {/* Breadcrumbs */}

@@ -12,11 +12,13 @@ pub struct ExtensionMetadata {
     pub id: String,
     pub name: String,
     pub version: String,
-    pub main: String,
+    #[serde(default)]
+    pub main: Option<String>,
+    #[serde(default)]
     pub extension_path: PathBuf,
-    #[serde(default)]
+    #[serde(default, rename = "activationEvents")]
     pub activation_events: Vec<String>,
-    #[serde(default)]
+    #[serde(default, rename = "displayName")]
     pub display_name: Option<String>,
     #[serde(default)]
     pub publisher: Option<String>,
@@ -30,49 +32,57 @@ pub struct ExtensionHostManager {
     child: Option<Child>,
     stdin: Option<std::process::ChildStdin>,
     pub extensions: Vec<ExtensionMetadata>,
-    pub extensions_dir: PathBuf,
+    pub extensions_dirs: Vec<PathBuf>,
 }
 
 impl ExtensionHostManager {
-    pub fn new(extensions_dir: PathBuf) -> Self {
+    pub fn new(extensions_dirs: Vec<PathBuf>) -> Self {
         Self {
             child: None,
             stdin: None,
             extensions: Vec::new(),
-            extensions_dir,
+            extensions_dirs,
         }
+    }
+
+    pub fn primary_extensions_dir(&self) -> PathBuf {
+        self.extensions_dirs[0].clone()
     }
 
     #[allow(dead_code)]
     pub fn scan_extensions(&mut self) -> std::io::Result<()> {
-        let base_dir = self.extensions_dir.clone();
-        if !base_dir.exists() {
-            std::fs::create_dir_all(&base_dir)?;
-        }
-
         self.extensions.clear();
-        for entry in std::fs::read_dir(base_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                let mut package_json_path = path.join("package.json");
-                if !package_json_path.exists() {
-                    package_json_path = path.join("extension").join("package.json");
-                }
 
-                if package_json_path.exists() {
-                    let content = std::fs::read_to_string(&package_json_path)?;
-                    if let Ok(mut meta) = serde_json::from_str::<ExtensionMetadata>(&content) {
-                        meta.extension_path = package_json_path.parent().unwrap().to_path_buf();
-                        // Construct ID if not present
-                        if meta.id.is_empty() {
-                            let publisher = meta
-                                .publisher
-                                .clone()
-                                .unwrap_or_else(|| "undefined".to_string());
-                            meta.id = format!("{}.{}", publisher, meta.name);
+        for base_dir in self.extensions_dirs.clone() {
+            if !base_dir.exists() {
+                continue;
+            }
+
+            for entry in std::fs::read_dir(base_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_dir() {
+                    let mut package_json_path = path.join("package.json");
+                    if !package_json_path.exists() {
+                        package_json_path = path.join("extension").join("package.json");
+                    }
+
+                    if package_json_path.exists() {
+                        if let Ok(content) = std::fs::read_to_string(&package_json_path) {
+                            if let Ok(mut meta) = serde_json::from_str::<ExtensionMetadata>(&content) {
+                                meta.extension_path =
+                                    package_json_path.parent().unwrap().to_path_buf();
+                                // Construct ID if not present
+                                if meta.id.is_empty() {
+                                    let publisher = meta
+                                        .publisher
+                                        .clone()
+                                        .unwrap_or_else(|| "undefined".to_string());
+                                    meta.id = format!("{}.{}", publisher, meta.name);
+                                }
+                                self.extensions.push(meta);
+                            }
                         }
-                        self.extensions.push(meta);
                     }
                 }
             }

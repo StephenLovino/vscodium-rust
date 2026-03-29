@@ -568,7 +568,6 @@ export async function sendAgentMessage(userPrompt: string, _onUpdate: (msg: stri
                 temperature: 0.7,
                 autonomous: true,
                 mode: store.getState().agentMode,
-                cyber_mode: store.getState().cyberMode,
                 ollama_url: store.getState().ollamaUrl
             }
         });

@@ -131,6 +131,12 @@ impl EditorState {
         ));
         sentient.set_app_handle(app.clone());
 
+        let mut ext_dirs = vec![config_dir.join("extensions")];
+        let builtin_ext_dir = root.join("vscode").join("extensions");
+        if builtin_ext_dir.exists() {
+            ext_dirs.push(builtin_ext_dir);
+        }
+
         Self {
             buffers: Mutex::new(HashMap::new()),
             active_path: Mutex::new(None),
@@ -140,9 +146,7 @@ impl EditorState {
             terminal_processes: Mutex::new(HashMap::new()),
             lsp_client: Arc::new(Mutex::new(LspClient::new())),
             context_keys: Arc::new(ContextKeyRegistry::new()),
-            ext_host: Arc::new(Mutex::new(ExtensionHostManager::new(
-                config_dir.join("extensions")
-            ))),
+            ext_host: Arc::new(Mutex::new(ExtensionHostManager::new(ext_dirs))),
             keybindings: Arc::new(Mutex::new(KeybindingRegistry::new())),
             debug_manager: Arc::new(Mutex::new(DebugManager::new())),
             activation_manager: Arc::new(Mutex::new(Mutex::new(ActivationManager::new()))),
@@ -349,18 +353,21 @@ async fn search_extensions(query: String) -> Result<Vec<marketplace::Marketplace
 }
 
 #[tauri::command]
-async fn install_extension(state: State<'_, EditorState>, publisher: String, name: String, version: String) -> Result<String, String> {
+async fn install_extension(state: State<'_, EditorState>, publisher: String, name: String, version: String) -> Result<extension_host::ExtensionMetadata, String> {
     let extensions_dir = {
         let eh = state.ext_host.lock().unwrap();
-        eh.extensions_dir.clone()
+        eh.primary_extensions_dir()
     };
     
-    let extension_id = marketplace::install_extension(publisher.clone(), name.clone(), version.clone(), extensions_dir.clone())
+    let _id = marketplace::install_extension(publisher.clone(), name.clone(), version.clone(), extensions_dir.clone())
         .await
         .map_err(|e| e.to_string())?;
 
     // Dynamically load the extension
     let target_dir = extensions_dir.join(format!("{}.{}-{}", publisher, name, version));
+    if !target_dir.exists() {
+        fs::create_dir_all(&target_dir).map_err(|e| e.to_string())?;
+    }
     let mut package_json_path = target_dir.join("package.json");
     if !package_json_path.exists() {
         package_json_path = target_dir.join("extension").join("package.json");
@@ -374,16 +381,28 @@ async fn install_extension(state: State<'_, EditorState>, publisher: String, nam
                 meta.id = format!("{}.{}", publisher, name);
             }
             let mut eh = state.ext_host.lock().unwrap();
-            let _ = eh.add_extension(meta);
+            let _ = eh.add_extension(meta.clone());
+            return Ok(meta);
         }
     }
 
-    Ok(extension_id)
+    Err("Failed to load installed extension metadata".to_string())
 }
 
 #[tauri::command]
 async fn get_popular_extensions() -> Result<Vec<marketplace::MarketplaceExtension>, String> {
      marketplace::get_popular_extensions().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_extension_details(id: String) -> Result<Value, String> {
+    let parts: Vec<&str> = id.split('.').collect();
+    if parts.len() < 2 {
+        return Err("Invalid extension ID".to_string());
+    }
+    let publisher = parts[0].to_string();
+    let name = parts[1..].join(".").to_string();
+    marketplace::get_extension_details(publisher, name).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1029,6 +1048,68 @@ async fn list_provider_models(state: State<'_, EditorState>, provider: String) -
 
 // Duplicates removed
 
+fn load_jsonc(path: &std::path::Path) -> Result<Value, String> {
+    if !path.exists() {
+        return Err(format!("File not found: {:?}", path));
+    }
+    let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    
+    // Strip comments (JSONC)
+    let re_block = regex::Regex::new(r"/\*[\s\S]*?\*/").unwrap();
+    let re_line = regex::Regex::new(r"//.*").unwrap();
+    let sanitized = re_block.replace_all(&content, "");
+    let sanitized = re_line.replace_all(&sanitized, "");
+    
+    let json: Value = serde_json::from_str(&sanitized).map_err(|e| format!("JSON Error in {:?}: {}", path, e))?;
+    Ok(json)
+}
+
+fn load_theme_recursive(path: &std::path::Path) -> Result<Value, String> {
+    let mut json = load_jsonc(path)?;
+    
+    // Handle 'include'
+    if let Some(include_path) = json.get("include").and_then(|v| v.as_str()) {
+        let parent = path.parent().unwrap();
+        let included_full_path = parent.join(include_path);
+        let included_json = load_theme_recursive(&included_full_path)?;
+        
+        // Merge included colors into current colors
+        if let Some(included_colors) = included_json.get("colors").and_then(|v| v.as_array()) {
+            if let Some(current_colors) = json.get_mut("colors").and_then(|v| v.as_object_mut()) {
+                 // Actually colors is a map, not array. VS Code themes use map for colors.
+            }
+        }
+
+        // Real merge logic for maps
+        if let Some(included_obj) = included_json.as_object() {
+            for (key, val) in included_obj {
+                if key == "colors" {
+                     if let Some(target_colors) = json.get_mut("colors").and_then(|v| v.as_object_mut()) {
+                         for (ckey, cval) in val.as_object().unwrap() {
+                             if !target_colors.contains_key(ckey) {
+                                 target_colors.insert(ckey.clone(), cval.clone());
+                             }
+                         }
+                     } else {
+                         json.as_object_mut().unwrap().insert("colors".to_string(), val.clone());
+                     }
+                } else if key == "tokenColors" {
+                     // Aggregate token colors (array)
+                     if let Some(target_tokens) = json.get_mut("tokenColors").and_then(|v| v.as_array_mut()) {
+                         if let Some(src_tokens) = val.as_array() {
+                             target_tokens.extend(src_tokens.iter().cloned());
+                         }
+                     } else {
+                         json.as_object_mut().unwrap().insert("tokenColors".to_string(), val.clone());
+                     }
+                }
+            }
+        }
+    }
+    
+    Ok(json)
+}
+
 #[tauri::command]
 fn get_installed_themes(state: State<'_, EditorState>) -> Result<Vec<Value>, String> {
     let host = state.ext_host.lock().map_err(|e| e.to_string())?;
@@ -1062,48 +1143,8 @@ fn get_installed_themes(state: State<'_, EditorState>) -> Result<Vec<Value>, Str
 
 #[tauri::command]
 fn load_extension_theme(path: String) -> Result<Value, String> {
-    fn load_theme_recursive(path: &std::path::Path) -> Result<Value, String> {
-        if !path.exists() {
-            return Err(format!("Theme file not found: {:?}", path));
-        }
-        let content = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-        
-        // Strip comments (JSONC)
-        let re_block = regex::Regex::new(r"/\*[\s\S]*?\*/").unwrap();
-        let re_line = regex::Regex::new(r"//.*").unwrap();
-        let sanitized = re_block.replace_all(&content, "");
-        let sanitized = re_line.replace_all(&sanitized, "");
-        
-        let mut json: Value = serde_json::from_str(&sanitized).map_err(|e| format!("JSON Error in {:?}: {}", path, e))?;
-        
-        // Handle 'include'
-        if let Some(include_path) = json.get("include").and_then(|v| v.as_str()) {
-            let parent = path.parent().unwrap();
-            let included_full_path = parent.join(include_path);
-            let included_json = load_theme_recursive(&included_full_path)?;
-            
-            // Merge included colors into current colors
-            if let Some(included_colors) = included_json.get("colors").and_then(|v| v.as_object()) {
-                if let Some(current_colors) = json.get_mut("colors").and_then(|v| v.as_object_mut()) {
-                    for (key, val) in included_colors {
-                        if !current_colors.contains_key(key) {
-                            current_colors.insert(key.clone(), val.clone());
-                        }
-                    }
-                } else {
-                    // Current file has no 'colors', use included ones
-                    json.as_object_mut().unwrap().insert("colors".to_string(), json!(included_colors));
-                }
-            }
-        }
-        
-        Ok(json)
-    }
-
     let p = std::path::Path::new(&path);
-    let theme_json = load_theme_recursive(p)?;
-    
-    Ok(theme_json)
+    load_theme_recursive(p)
 }
 
 #[tauri::command] fn register_ida_pro() -> Result<(), String> { Ok(()) }
@@ -1134,7 +1175,143 @@ fn ai_modify_file(_state: tauri::State<'_, EditorState>, path: String, instructi
     println!("AI requested modification for path: {}, instruction: {}", path, instruction);
     Ok(())
 }
-#[tauri::command] fn get_icon_theme_mapping() -> Result<Value, String> { Ok(json!({})) }
+#[tauri::command] 
+fn get_icon_theme_mapping(state: State<'_, EditorState>) -> Result<Value, String> {
+    let host = state.ext_host.lock().map_err(|e| e.to_string())?;
+    
+    // Find vs-seti-icon-theme (usually in theme-seti extension)
+    for ext in &host.extensions {
+        if let Some(contributes) = &ext.contributes {
+            if let Some(icon_themes) = contributes.get("iconThemes").and_then(|v| v.as_array()) {
+                for theme in icon_themes {
+                    if let Some(path) = theme.get("path").and_then(|v| v.as_str()) {
+                        let full_path = ext.extension_path.join(path);
+                        if let Ok(mut mapping) = load_jsonc(&full_path) {
+                            // Convert font paths to full paths
+                            if let Some(fonts) = mapping.get_mut("fonts").and_then(|v| v.as_array_mut()) {
+                                for font in fonts {
+                                    if let Some(srcs) = font.get_mut("src").and_then(|v| v.as_array_mut()) {
+                                        for src in srcs {
+                                            if let Some(path_val) = src.get_mut("path").and_then(|v| v.as_str()) {
+                                                let font_path = full_path.parent().unwrap().join(path_val);
+                                                *src = json!({ "path": font_path.to_string_lossy().to_string(), "format": "woff" });
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            // Add extension path for relative URI resolution in frontend
+                            if let Some(obj) = mapping.as_object_mut() {
+                                obj.insert("extensionPath".to_string(), json!(ext.extension_path.to_string_lossy().to_string()));
+                            }
+                            return Ok(mapping);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(json!({}))
+}
+
+#[tauri::command]
+fn get_extension_contributions(state: State<'_, EditorState>) -> Result<Value, String> {
+    let host = state.ext_host.lock().map_err(|e| e.to_string())?;
+    let mut contribs = json!({
+        "snippets": [],
+        "keybindings": [],
+        "grammars": [],
+        "languages": [],
+        "viewsContainers": { "activitybar": [] },
+        "views": {}
+    });
+
+    for ext in &host.extensions {
+        if let Some(contributes) = &ext.contributes {
+            // Snippets
+            if let Some(ext_snippets) = contributes.get("snippets").and_then(|v| v.as_array()) {
+                for snippet in ext_snippets {
+                    let mut s = snippet.clone();
+                    if let Some(spath) = s.get("path").and_then(|v| v.as_str()) {
+                         let full_spath = ext.extension_path.join(spath.replace("./", ""));
+                         if let Some(obj) = s.as_object_mut() {
+                             obj.insert("absolutePath".to_string(), json!(full_spath.to_string_lossy().to_string()));
+                         }
+                    }
+                    contribs["snippets"].as_array_mut().unwrap().push(s);
+                }
+            }
+            // Languages
+            if let Some(ext_langs) = contributes.get("languages").and_then(|v| v.as_array()) {
+                for lang in ext_langs {
+                    contribs["languages"].as_array_mut().unwrap().push(lang.clone());
+                }
+            }
+            // Grammars
+            if let Some(ext_grammars) = contributes.get("grammars").and_then(|v| v.as_array()) {
+                for grammar in ext_grammars {
+                    let mut g = grammar.clone();
+                    if let Some(gpath) = g.get("path").and_then(|v| v.as_str()) {
+                        let full_gpath = ext.extension_path.join(gpath.replace("./", ""));
+                        if let Some(obj) = g.as_object_mut() {
+                            obj.insert("absolutePath".to_string(), json!(full_gpath.to_string_lossy().to_string()));
+                        }
+                    }
+                    contribs["grammars"].as_array_mut().unwrap().push(g);
+                }
+            }
+            // Views Containers (Activity Bar)
+            if let Some(containers) = contributes.get("viewsContainers") {
+                if let Some(activitybar) = containers.get("activitybar").and_then(|v| v.as_array()) {
+                    for container in activitybar {
+                        let mut c = container.clone();
+                        if let Some(obj) = c.as_object_mut() {
+                            obj.insert("extensionPath".to_string(), json!(ext.extension_path.to_string_lossy().to_string()));
+                            obj.insert("extensionId".to_string(), json!(ext.id));
+                            
+                            // Handle icons
+                            if let Some(icon_val) = obj.get("icon").and_then(|v| v.as_str()) {
+                                if icon_val.starts_with("$(") && icon_val.ends_with(")") {
+                                    // Codicon reference: $(references) -> references
+                                    let icon_name = &icon_val[2..icon_val.len()-1];
+                                    obj.insert("icon".to_string(), json!(icon_name));
+                                } else {
+                                    // File path icon
+                                    let full_icon_path = ext.extension_path.join(icon_val.replace("./", ""));
+                                    if let Ok(icon_data) = std::fs::read(&full_icon_path) {
+                                        let b64 = base64::encode(icon_data);
+                                        let mime = if icon_val.ends_with(".svg") { "image/svg+xml" } else { "image/png" };
+                                        obj.insert("base64_icon".to_string(), json!(format!("data:{};base64,{}", mime, b64)));
+                                    }
+                                }
+                            }
+                        }
+                        contribs["viewsContainers"]["activitybar"].as_array_mut().unwrap().push(c);
+                    }
+                }
+            }
+            // Views (Sidebars)
+            if let Some(views) = contributes.get("views").and_then(|v| v.as_object()) {
+                for (location, view_list) in views {
+                    if let Some(arr) = view_list.as_array() {
+                        let target_arr = contribs["views"].as_object_mut().unwrap()
+                            .entry(location.clone()).or_insert(json!([])).as_array_mut().unwrap();
+                        for view in arr {
+                            let mut v = view.clone();
+                            if let Some(obj) = v.as_object_mut() {
+                                obj.insert("extensionPath".to_string(), json!(ext.extension_path.to_string_lossy().to_string()));
+                                obj.insert("extensionId".to_string(), json!(ext.id));
+                            }
+                            target_arr.push(v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    Ok(contribs)
+}
 #[tauri::command] 
 async fn hunt_api_keys(app: tauri::AppHandle, state: State<'_, EditorState>) -> Result<Value, String> {
     use tauri::Emitter;
@@ -1336,8 +1513,9 @@ pub fn run() {
             git_unstage, git_commit, get_api_keys, save_api_keys,
             list_provider_models, ai_chat, spawn_terminal, write_to_terminal,
             resize_terminal, close_terminal, get_available_shells, search_extensions, install_extension,
-            get_popular_extensions, get_installed_extensions, 
-            get_installed_themes, load_extension_theme,
+            get_popular_extensions, get_installed_extensions, get_extension_details,
+            get_installed_themes, load_extension_theme, get_extension_contributions,
+            ext_host_init, ext_host_send,
             debug_start, debug_send, debug_stop, check_activation_event,
             adb_list_devices, adb_list_emulators, spawn_emulator, 
             set_active_device, set_ai_model, list_mcp_servers, add_mcp_server, remove_mcp_server,

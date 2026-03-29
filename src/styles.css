@@ -19,21 +19,15 @@
   --vscode-statusBar-background: #007acc;
   --vscode-statusBar-foreground: #ffffff;
   --vscode-titleBar-activeBackground: #1e1e1e;
-  --vscode-titleBar-activeForeground: #cccccc;
-  --vscode-titleBar-border: rgba(128, 128, 128, 0.35);
-  --vscode-editorGroupHeader-tabsBackground: #252526;
-  --vscode-tab-activeBackground: #1e1e1e;
-  --vscode-tab-inactiveBackground: #2d2d2d;
-  --vscode-tab-activeForeground: #ffffff;
-  --vscode-tab-inactiveForeground: rgba(255, 255, 255, 0.5);
-  --vscode-tab-border: #252526;
-  --vscode-list-hoverBackground: #2a2d2e;
-  --vscode-list-activeSelectionBackground: #094771;
-  --vscode-list-activeSelectionForeground: #ffffff;
-  --vscode-focusBorder: #007fd4;
-  --vscode-input-background: #3c3c3c;
+  --vscode-titleBar-activeForeground: #ffffff;
   --vscode-panel-background: #1e1e1e;
-  --vscode-panel-border: rgba(128, 128, 128, 0.35);
+  --vscode-panel-border: #2b2b2b;
+  
+  /* Custom Antigravity Tokens */
+  --antigravity-accent: #007acc;
+  --antigravity-success: #89d185;
+  --antigravity-warning: #cca700;
+  --antigravity-error: #f48771;
 
   /* Layout Metrics (Pixel Perfect VS Code) */
   --activity-bar-width: 48px;
@@ -44,14 +38,109 @@
   --header-height: 35px;
   --sidebar-header-height: 35px;
   --pane-header-height: 22px;
+  --right-sidebar-min-width: 250px;
+  --right-sidebar-max-width: 600px;
+  --right-sidebar-initial-width: 320px;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-mono: "SF Mono", Monaco, Menlo, Consolas, "JetBrains Mono", monospace;
   
   /* Native-like Shadows */
-  --shadow-macos: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  --shadow-macos: 0 10px 30px rgba(0, 0, 0, 0.45);
   --shadow-menu: 0 5px 15px rgba(0, 0, 0, 0.4);
   --shadow-tooltip: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.nav-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.nav-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  opacity: 1;
+}
+
+.nav-btn i {
+  font-size: 14px;
+}
+
+.panel-tab {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.panel-tab:hover {
+  color: #fff;
+}
+
+.panel-tab.active {
+  color: #fff;
+}
+
+.panel-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 12px;
+  right: 12px;
+  height: 1px;
+  background: var(--antigravity-accent);
+}
+
+/* Authentic UI Utilities */
+.solid-panel {
+  background: var(--vscode-panel-background);
+  border: 1px solid var(--vscode-panel-border);
+}
+
+.solid-card {
+  background: var(--vscode-sideBar-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 2px;
+}
+
+/* Glassmorphism & Premium UI */
+.glass-panel {
+  background: rgba(30, 30, 30, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: rgba(45, 45, 45, 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.premium-shadow {
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+}
+
+.interactive-hover {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.interactive-hover:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* Platform-Specific Typography */
@@ -90,9 +179,8 @@ body {
   letter-spacing: -0.01em; /* Precise native-style spacing */
 }
 
+/* Layout Core */
 #root {
-  height: 100%;
-  display: flex;
   flex-direction: column;
 }
 
@@ -107,11 +195,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(121, 121, 121, 0.2); /* Fainter initial state */
-  border: 3px solid transparent; /* Creates the padding effect */
+  background: rgba(121, 121, 121, 0.4);
+  border: 3px solid transparent;
   background-clip: padding-box;
   border-radius: 9999px;
-  transition: background 0.2s;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -214,36 +301,17 @@ body.resizing * {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
+  padding: 0;
   border-bottom: 1px solid var(--vscode-panel-border);
-  font-size: 13px;
+  font-size: 12px;
   -webkit-app-region: drag;
-}
-
-.window-controls-left {
-  display: flex;
-  gap: 12px;
-  padding-left: 70px;
-  /* Space for macOS traffic lights */
-  -webkit-app-region: no-drag;
-}
-
-.window-controls-left .menu-item {
-  cursor: pointer;
-  color: var(--text-secondary);
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.window-controls-left .menu-item:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: #cccccc;
+  user-select: none;
 }
 
 .title-bar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex: 1;
 }
 
@@ -254,7 +322,8 @@ body.resizing * {
 
 body.os-macos .window-controls-spacer {
   display: block;
-  width: 80px; /* Standard space for traffic lights */
+  width: 80px; /* Precise macOS traffic light width for integrated looks */
+  flex-shrink: 0;
 }
 
 body.os-windows .title-bar-right,
@@ -312,15 +381,9 @@ body.os-linux .title-bar-right {
   border-radius: 6px;
   padding: 4px 0;
   min-width: 180px;
-  box-shadow: var(--shadow-macos); /* Refined macOS Shadow */
+  box-shadow: var(--shadow-macos); 
   z-index: 1000;
   margin-top: 4px;
-  animation: menuFadeIn 0.1s ease-out;
-}
-
-@keyframes menuFadeIn {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 .menu-dropdown-item {
@@ -352,22 +415,23 @@ body.os-linux .title-bar-right {
 }
 
 .command-box {
-  background-color: var(--vscode-input-background);
+  background-color: var(--vscode-titleBar-activeBackground);
   border: 1px solid var(--vscode-panel-border);
-  border-radius: 6px; /* Native rounded corners */
+  border-radius: 6px;
   height: 24px;
   width: 100%;
-  max-width: 400px;
+  max-width: 450px;
   display: flex;
   align-items: center;
   padding: 0 8px;
   cursor: pointer;
-  transition: border-color 0.2s, background-color 0.2s;
+  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .command-box:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: var(--vscode-focusBorder);
+  background-color: rgba(255, 255, 255, 0.03);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .command-box .text {
@@ -375,6 +439,14 @@ body.os-linux .title-bar-right {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12px;
+  text-align: center;
+  color: var(--vscode-titleBar-activeForeground);
+  opacity: 0.6;
+}
+
+.command-box:hover .text {
+  opacity: 0.9;
 }
 
 .ai-model-badge {
@@ -390,11 +462,6 @@ body.os-linux .title-bar-right {
   color: #60a5fa;
   margin-right: 8px;
   letter-spacing: 0.02em;
-  backdrop-filter: blur(5px);
-}
-
-.ai-model-badge.cyber {
-  color: #a78bfa;
 }
 
 .ai-model-badge .codicon-sparkle {
@@ -545,7 +612,6 @@ body.os-linux .title-bar-right {
 
 .activity-item i.codicon {
   font-size: 24px;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 
@@ -562,21 +628,6 @@ body.os-linux .title-bar-right {
   color: var(--vscode-activityBar-activeForeground);
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.sidebar-section {
-  animation: fadeIn 0.3s ease-out;
-}
 
 /* Sidebar Accordion */
 .sidebar-accordion {
@@ -700,8 +751,8 @@ body.os-linux .title-bar-right {
 }
 
 .theme-picker {
-  background: #252526;
-  border: 1px solid #454545;
+  background: var(--vscode-menu-background, #252526);
+  border: 1px solid var(--vscode-menu-border, #454545);
   border-radius: 6px;
   width: 500px;
   max-width: 90vw;
@@ -709,7 +760,7 @@ body.os-linux .title-bar-right {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: #cccccc;
+  color: var(--vscode-menu-foreground, #cccccc);
 }
 
 .theme-item {
@@ -2320,3 +2371,5 @@ body {
 .right-sidebar-content::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+

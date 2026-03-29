@@ -8,7 +8,6 @@ import ExtensionsView from './ExtensionsView';
 import ScmView from './ScmView';
 import DebugView from './DebugView';
 import EmulatorPanel from './EmulatorPanel';
-import WorkflowPanel from './WorkflowPanel';
 import AgentSettingsView from './AgentSettingsView';
 
 interface FlattenedNode {
@@ -41,29 +40,48 @@ const FileTreeItem: React.FC<{ entry: FileEntry; depth: number; iconThemeMapping
     const isActive = tabs.find(t => t.id === activeTabId)?.path === entry.path;
 
     const getIcon = () => {
-        if (entry.is_dir) {
-            return { type: 'icon', value: `codicon codicon-${isExpanded ? 'chevron-down' : 'chevron-right'}` };
-        }
-        
         if (iconThemeMapping) {
+            const fileName = entry.name.toLowerCase();
             const ext = entry.name.split('.').pop()?.toLowerCase();
             let iconId = null;
-            
-            if (ext && iconThemeMapping.fileExtensions && iconThemeMapping.fileExtensions[ext]) {
-                iconId = iconThemeMapping.fileExtensions[ext];
-            } else if (iconThemeMapping.file) {
-                iconId = iconThemeMapping.file;
+
+            if (entry.is_dir) {
+                // Folder icons
+                if (isExpanded && iconThemeMapping.folderExpanded) {
+                    iconId = iconThemeMapping.folderExpanded;
+                } else if (iconThemeMapping.folder) {
+                    iconId = iconThemeMapping.folder;
+                }
+                
+                // Specific folder names if needed (advanced, skipping for now to keep it simple but better than before)
+            } else {
+                // File icons
+                if (iconThemeMapping.fileNames && iconThemeMapping.fileNames[fileName]) {
+                    iconId = iconThemeMapping.fileNames[fileName];
+                } else if (ext && iconThemeMapping.fileExtensions && iconThemeMapping.fileExtensions[ext]) {
+                    iconId = iconThemeMapping.fileExtensions[ext];
+                } else if (iconThemeMapping.file) {
+                    iconId = iconThemeMapping.file;
+                }
             }
 
             if (iconId && iconThemeMapping.iconDefinitions && iconThemeMapping.iconDefinitions[iconId]) {
                 const def = iconThemeMapping.iconDefinitions[iconId];
                 if (def.iconPath) {
-                    return { type: 'img', value: def.iconPath };
+                    // Try to use convertFileSrc if available, otherwise raw path (Tauri handles it with protocol)
+                    const src = (window as any).__TAURI__?.core?.convertFileSrc 
+                        ? (window as any).__TAURI__.core.convertFileSrc(def.iconPath)
+                        : `asset://localhost/${encodeURIComponent(def.iconPath)}`;
+                    return { type: 'img', value: src };
                 }
             }
         }
         
-        return { type: 'icon', value: entry.is_dir ? 'codicon codicon-folder' : 'codicon codicon-file' };
+        if (entry.is_dir) {
+            return { type: 'icon', value: `codicon codicon-${isExpanded ? 'chevron-down' : 'chevron-right'}` };
+        }
+        
+        return { type: 'icon', value: 'codicon codicon-file' };
     };
 
     const handleToggle = (e: React.MouseEvent) => {
@@ -308,15 +326,22 @@ const Sidebar: React.FC = () => {
         'extensions-view': 'EXTENSIONS',
         'specs-view': 'SPECS',
         'agent-view': 'AGENT SETTINGS',
-        'planning-view': 'PLANNING',
         'mobile-view': 'MOBILE EMULATORS'
     };
 
+    const extensionContributions = useStore(state => state.extensionContributions);
+
+    const isCoreView = titles[activeView] !== undefined;
+    const extensionContainer = !isCoreView ? extensionContributions?.viewsContainers?.activitybar?.find((c: any) => c.id === activeView) : null;
+    const extensionViews = extensionContainer ? (extensionContributions?.views?.[activeView] || []) : [];
+
     return (
         <aside className="sidebar" id="sidebar">
-            <div className="sidebar-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 12px', height: '35px', minHeight: '35px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 600 }}>{titles[activeView] || activeView.toUpperCase()}</div>
-            </div>
+            {activeView !== 'extensions-view' && (
+                <div className="sidebar-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 12px', height: '35px', minHeight: '35px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600 }}>{titles[activeView] || (extensionContainer?.title?.toUpperCase() || activeView.toUpperCase())}</div>
+                </div>
+            )}
 
             <div className="sidebar-content-wrapper" style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 {activeView === 'explorer-view' && (
@@ -361,7 +386,33 @@ const Sidebar: React.FC = () => {
                 {activeView === 'extensions-view' && <ExtensionsView />}
                 {activeView === 'agent-view' && <AgentSettingsView />}
                 {activeView === 'mobile-view' && <EmulatorPanel />}
-                {activeView === 'planning-view' && <WorkflowPanel />}
+
+                {/* Extension Contributed Views */}
+                {extensionContainer && (
+                    <div className="sidebar-content" style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto' }}>
+                        {extensionViews.length > 0 ? (
+                            extensionViews.map((view: any) => (
+                                <SidebarPane key={view.id} title={view.name.toUpperCase()} defaultCollapsed={false}>
+                                    <div style={{ padding: '20px', textAlign: 'center', opacity: 0.7 }}>
+                                        <div style={{ fontSize: '12px', marginBottom: '8px' }}>{view.name} View</div>
+                                        <div style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>ID: {view.id}</div>
+                                        <div style={{ fontSize: '10px', marginTop: '12px', fontStyle: 'italic' }}>
+                                            This view is provided by extension: <br/> {view.extensionId}
+                                        </div>
+                                        {/* In a real scenario, we'd render a webview or iframe here for the extension's UI */}
+                                        <div style={{ marginTop: '20px', padding: '8px', border: '1px dashed var(--vscode-panel-border)', fontSize: '11px' }}>
+                                            UI content from extension package would be rendered here via Webview API.
+                                        </div>
+                                    </div>
+                                </SidebarPane>
+                            ))
+                        ) : (
+                            <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5, fontSize: '12px' }}>
+                                No views registered for this container.
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </aside>
     );

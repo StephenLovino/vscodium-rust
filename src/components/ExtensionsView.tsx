@@ -1,149 +1,285 @@
 import React, { useState, useEffect } from 'react';
+import { useStore } from '../store';
 import { invoke } from '@tauri-apps/api/core';
+import ExtensionDetails from './ExtensionDetails';
 
-interface Extension {
-    id?: string;
-    namespace?: string;
-    publisher?: string;
-    name: string;
-    version: string;
-    displayName?: string;
-    description?: string;
-    iconUrl?: string;
+interface ExtensionItemProps {
+    ext: any;
+    isInstalled?: boolean;
+    onInstall?: () => void;
+    onClick?: () => void;
 }
 
-const ExtensionsView: React.FC = () => {
-    const [query, setQuery] = useState('');
-    const [marketExtensions, setMarketExtensions] = useState<Extension[]>([]);
-    const [installedExtensions, setInstalledExtensions] = useState<Extension[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
-    const [activeTab, setActiveTab] = useState<'installed' | 'marketplace'>('installed');
+const ExtensionItem: React.FC<ExtensionItemProps> = ({ ext, isInstalled, onInstall, onClick }) => {
+    const [installing, setInstalling] = useState(false);
+    const [installed, setInstalled] = useState(isInstalled);
+    const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        loadInstalled();
-    }, []);
+    const displayName = ext.displayName || ext.name;
+    const publisher = ext.publisher || ext.namespace || ext.publisherName;
+    const version = ext.version;
+    const description = ext.description || "No description provided.";
+    const icon = ext.iconUrl || ext.icon_url || ext.base64_icon || "https://open-vsx.org/api/icons/default.png";
+    
+    const downloads = ext.downloadCount ? (ext.downloadCount > 1000 ? (ext.downloadCount / 1000).toFixed(1) + "k" : ext.downloadCount) : null;
+    const rating = ext.averageRating ? ext.averageRating.toFixed(1) : null;
 
-    const loadInstalled = async () => {
+    const addInstalledExtension = useStore(state => state.addInstalledExtension);
+    const requestTrust = useStore(state => state.requestExtensionTrust);
+    
+    const handleInstall = async (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (installed || installing) return;
+
+        const trusted = await requestTrust(publisher, ext.name, version);
+        if (!trusted) return;
+        
+        setInstalling(true);
+        setError(null);
         try {
-            const installed = await invoke<Extension[]>('get_installed_extensions');
-            setInstalledExtensions(installed);
-        } catch (e) {
-            console.error('Failed to load installed extensions', e);
-        }
-    };
-
-    const handleSearch = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!query) return;
-        setIsSearching(true);
-        setActiveTab('marketplace');
-        try {
-            const results = await invoke<Extension[]>('search_extensions', { query });
-            setMarketExtensions(results);
-        } catch (e) {
-            console.error('Search extensions failed', e);
-        } finally {
-            setIsSearching(false);
-        }
-    };
-
-    const installExtension = async (ext: Extension) => {
-        try {
-            // Publisher from Open-VSX is usually in 'namespace' or manually split from id
-            const publisher = ext.namespace || ext.publisher || ext.id?.split('.')[0] || 'unknown';
-            await invoke('install_extension', { 
+            const meta = await invoke("install_extension", { 
                 publisher, 
                 name: ext.name, 
-                version: ext.version 
+                version 
             });
-            alert(`Installed ${ext.displayName || ext.name}`);
-            loadInstalled();
-        } catch (e) {
-            alert(`Installation failed: ${e}`);
+            setInstalled(true);
+            addInstalledExtension(meta);
+            if (onInstall) onInstall();
+        } catch (err: any) {
+            console.error("Installation failed:", err);
+            setError("Failed");
+            setTimeout(() => setError(null), 3000);
+        } finally {
+            setInstalling(false);
         }
     };
 
     return (
-        <div className="extensions-view" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-             <div className="sidebar-search-container" style={{ padding: '10px' }}>
-                <form onSubmit={handleSearch}>
+        <div className={`extension-item${installed ? ' installed' : ''}`} 
+            onClick={onClick}
+            style={{
+                display: 'flex',
+                padding: '10px',
+                borderBottom: '1px solid rgba(255,255,255,0.05)',
+                gap: '12px',
+                fontSize: '13px',
+                cursor: 'pointer',
+                position: 'relative'
+            }}>
+            <div className="extension-icon" style={{ flexShrink: 0, width: '42px', height: '42px' }}>
+                <img 
+                    src={icon} 
+                    alt={displayName} 
+                    style={{ width: '100%', height: '100%', borderRadius: '4px', objectFit: 'contain' }}
+                    onError={(e) => { (e.target as HTMLImageElement).src = "https://open-vsx.org/api/icons/default.png"; }}
+                />
+            </div>
+            <div className="extension-details" style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ fontWeight: 600, color: '#ccc', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>
+                    <span style={{ fontSize: '11px', opacity: 0.6 }}>v{version}</span>
+                </div>
+                <div style={{ color: '#3794ff', fontSize: '12px', marginBottom: '2px' }}>{publisher}</div>
+                <div style={{ opacity: 0.7, fontSize: '12px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', lineHeight: '1.2' }}>{description}</div>
+                
+                {(downloads || rating) && !installed && (
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '6px', fontSize: '11px', opacity: 0.5 }}>
+                        {downloads && <span><i className="codicon codicon-cloud-download" style={{ fontSize: '11px', marginRight: '4px' }}></i>{downloads}</span>}
+                        {rating && <span><i className="codicon codicon-star-full" style={{ fontSize: '11px', marginRight: '4px', color: '#f1c40f' }}></i>{rating}</span>}
+                    </div>
+                )}
+
+                {installed && (
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '8px', fontSize: '14px', opacity: 0.7 }}>
+                        <i className="codicon codicon-settings" style={{ cursor: 'pointer' }} title="Extension Settings"></i>
+                        <i className="codicon codicon-debug-pause" style={{ cursor: 'pointer' }} title="Disable"></i>
+                        <i className="codicon codicon-trash" style={{ cursor: 'pointer', color: '#f44336' }} title="Uninstall"></i>
+                    </div>
+                )}
+            </div>
+
+            {!installed && (
+                <button 
+                    onClick={handleInstall}
+                    disabled={installing}
+                    style={{
+                        position: 'absolute',
+                        right: '10px',
+                        bottom: '10px',
+                        padding: '2px 8px',
+                        background: error ? 'var(--vscode-errorForeground)' : '#007acc',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '2px',
+                        fontSize: '11px',
+                        cursor: installing ? 'wait' : 'pointer',
+                        opacity: installing ? 0.7 : 1,
+                        fontWeight: 600
+                    }}
+                >
+                    {installing ? 'Installing...' : (error || 'Install')}
+                </button>
+            )}
+        </div>
+    );
+};
+
+
+const ExtensionsView: React.FC = () => {
+    const { 
+        installedExtensions, 
+        marketExtensions, 
+        popularExtensions, 
+        isSearchingExtensions,
+        searchExtensions, 
+        refreshInstalledExtensions,
+        refreshPopularExtensions,
+        selectedExtensionId,
+        setSelectedExtensionId
+    } = useStore();
+    
+    const [searchQuery, setSearchQuery] = useState('');
+    const [activeAccordion, setActiveAccordion] = useState<string | null>('marketplace');
+
+    useEffect(() => {
+        refreshInstalledExtensions();
+        refreshPopularExtensions();
+    }, []);
+
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        searchExtensions(searchQuery);
+        if (searchQuery) setActiveAccordion('marketplace');
+    };
+
+    const toggleAccordion = (id: string) => {
+        setActiveAccordion(activeAccordion === id ? null : id);
+    };
+
+    const isInstalled = (ext: any) => {
+        const id = `${ext.publisher || ext.namespace || ext.publisherName}.${ext.name}`;
+        return installedExtensions.some(i => `${i.publisher}.${i.name}` === id);
+    };
+
+    if (selectedExtensionId) {
+        return <ExtensionDetails extensionId={selectedExtensionId} onBack={() => setSelectedExtensionId(null)} />;
+    }
+
+    return (
+        <div className="extensions-view" style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#252526' }}>
+            <div className="search-container" style={{ padding: '10px' }}>
+                <form onSubmit={handleSearch} style={{ position: 'relative' }}>
                     <input 
                         type="text" 
-                        value={query}
-                        onChange={(e) => setQuery(e.target.value)}
-                        placeholder="Search Extensions in Marketplace" 
-                        style={{ 
-                            width: '100%', 
-                            boxSizing: 'border-box', 
-                            background: 'var(--vscode-input-background)', 
-                            color: 'var(--vscode-input-foreground)', 
-                            border: '1px solid var(--vscode-panel-border)', 
-                            padding: '4px 6px', 
-                            fontSize: '12px', 
-                            outline: 'none',
-                            borderRadius: '2px'
-                        }} 
+                        placeholder="Search Extensions in Marketplace..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        style={{
+                            width: '100%',
+                            padding: '6px 30px 6px 8px',
+                            background: '#3c3c3c',
+                            color: '#ccc',
+                            border: '1px solid #3c3c3c',
+                            borderRadius: '2px',
+                            fontSize: '13px',
+                            outline: 'none'
+                        }}
                     />
+                    {isSearchingExtensions && (
+                        <div style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)' }}>
+                            <i className="codicon codicon-loading codicon-modifier-spin" style={{ fontSize: '14px', opacity: 0.6 }}></i>
+                        </div>
+                    )}
                 </form>
             </div>
 
-            <div className="extensions-tabs" style={{ display: 'flex', borderBottom: '1px solid var(--vscode-panel-border)', fontSize: '11px' }}>
-                <div 
-                    onClick={() => setActiveTab('installed')}
-                    style={{ padding: '6px 12px', cursor: 'pointer', opacity: activeTab === 'installed' ? 1 : 0.6, borderBottom: activeTab === 'installed' ? '1px solid var(--vscode-focusBorder)' : 'none' }}>
-                    INSTALLED
-                </div>
-                <div 
-                    onClick={() => setActiveTab('marketplace')}
-                    style={{ padding: '6px 12px', cursor: 'pointer', opacity: activeTab === 'marketplace' ? 1 : 0.6, borderBottom: activeTab === 'marketplace' ? '1px solid var(--vscode-focusBorder)' : 'none' }}>
-                    MARKETPLACE
-                </div>
-            </div>
-
-            <div className="extensions-list" style={{ flex: 1, overflowY: 'auto', padding: '10px' }}>
-                {activeTab === 'installed' ? (
-                    installedExtensions.map((ext, i) => (
-                        <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '12px', fontSize: '12px' }}>
-                            <div style={{ width: '32px', height: '32px', background: '#333', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                <i className="codicon codicon-extensions" style={{ fontSize: '20px', opacity: 0.5 }}></i>
-                            </div>
-                            <div style={{ flex: 1, overflow: 'hidden' }}>
-                                <div style={{ fontWeight: 'bold' }}>{ext.displayName || ext.name}</div>
-                                <div style={{ fontSize: '10px', opacity: 0.6 }}>{ext.version} - {ext.publisher}</div>
-                            </div>
+            <div className="extensions-content" style={{ flex: 1, overflowY: 'auto' }}>
+                {/* Installed Accordion */}
+                <div className="accordion-section">
+                    <div 
+                        className="accordion-header" 
+                        onClick={() => toggleAccordion('installed')}
+                        style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', fontWeight: 600, cursor: 'pointer', background: 'rgba(255,255,255,0.05)', fontSize: '11px', color: '#bbbbbb' }}
+                    >
+                        <i className={`codicon codicon-chevron-${activeAccordion === 'installed' ? 'down' : 'right'}`} style={{ marginRight: '6px' }}></i>
+                        <span>INSTALLED</span>
+                        <span style={{ marginLeft: 'auto', background: '#4d4d4d', color: '#eee', padding: '0 6px', borderRadius: '10px', fontSize: '10px' }}>{installedExtensions.length}</span>
+                    </div>
+                    {activeAccordion === 'installed' && (
+                        <div className="accordion-content">
+                            {installedExtensions.length > 0 ? (
+                                installedExtensions.map(ext => (
+                                    <ExtensionItem 
+                                        key={`${ext.publisher}.${ext.name}`} 
+                                        ext={ext} 
+                                        isInstalled={true} 
+                                        onClick={() => setSelectedExtensionId(`${ext.publisher}.${ext.name}`)}
+                                    />
+                                ))
+                            ) : (
+                                <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5, fontSize: '12px' }}>No extensions installed.</div>
+                            )}
                         </div>
-                    ))
-                ) : (
-                    isSearching ? (
-                        <div style={{ textAlign: 'center', padding: '20px' }}><i className="codicon codicon-loading codicon-modifier-spin"></i></div>
-                    ) : (
-                        marketExtensions.map((ext, i) => (
-                            <div key={i} style={{ display: 'flex', gap: '10px', marginBottom: '16px', fontSize: '12px' }}>
-                                {ext.iconUrl ? (
-                                    <img src={ext.iconUrl} style={{ width: '32px', height: '32px', borderRadius: '4px' }} alt="icon" />
+                    )}
+                </div>
+
+                {/* Marketplace Results / Popular Accordion */}
+                <div className="accordion-section" style={{ marginTop: '1px' }}>
+                    <div 
+                        className="accordion-header" 
+                        onClick={() => toggleAccordion('marketplace')}
+                        style={{ display: 'flex', alignItems: 'center', padding: '4px 8px', fontWeight: 600, cursor: 'pointer', background: 'rgba(255,255,255,0.05)', fontSize: '11px', color: '#bbbbbb' }}
+                    >
+                        <i className={`codicon codicon-chevron-${activeAccordion === 'marketplace' ? 'down' : 'right'}`} style={{ marginRight: '6px' }}></i>
+                        <span>{searchQuery && marketExtensions.length > 0 ? 'MARKETPLACE' : 'POPULAR'}</span>
+                    </div>
+                    {activeAccordion === 'marketplace' && (
+                        <div className="accordion-content">
+                            {searchQuery ? (
+                                marketExtensions.length > 0 ? (
+                                    marketExtensions.map(ext => (
+                                        <ExtensionItem 
+                                            key={`${ext.publisher || ext.namespace || ext.publisherName}.${ext.name}`} 
+                                            ext={ext} 
+                                            isInstalled={isInstalled(ext)}
+                                            onInstall={refreshInstalledExtensions}
+                                            onClick={() => setSelectedExtensionId(`${ext.publisher || ext.namespace || ext.publisherName}.${ext.name}`)}
+                                        />
+                                    ))
                                 ) : (
-                                    <div style={{ width: '32px', height: '32px', background: '#333', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <i className="codicon codicon-extensions" style={{ fontSize: '20px', opacity: 0.5 }}></i>
-                                    </div>
-                                )}
-                                <div style={{ flex: 1, overflow: 'hidden' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span style={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ext.displayName || ext.name}</span>
-                                        <button 
-                                            onClick={() => installExtension(ext)}
-                                            style={{ background: 'var(--vscode-button-background)', color: 'white', border: 'none', padding: '2px 8px', fontSize: '10px', cursor: 'pointer', borderRadius: '2px' }}>
-                                            Install
-                                        </button>
-                                    </div>
-                                    <div style={{ fontSize: '11px', opacity: 0.8, marginTop: '2px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                                        {ext.description}
-                                    </div>
-                                </div>
-                            </div>
-                        ))
-                    )
-                )}
+                                    !isSearchingExtensions && <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5, fontSize: '12px' }}>No results found for "{searchQuery}".</div>
+                                )
+                            ) : (
+                                popularExtensions.length > 0 ? (
+                                    popularExtensions.map(ext => (
+                                        <ExtensionItem 
+                                            key={`${ext.publisher || ext.namespace || ext.publisherName}.${ext.name}`} 
+                                            ext={ext} 
+                                            isInstalled={isInstalled(ext)}
+                                            onInstall={refreshInstalledExtensions}
+                                            onClick={() => setSelectedExtensionId(`${ext.publisher || ext.namespace || ext.publisherName}.${ext.name}`)}
+                                        />
+                                    ))
+                                ) : (
+                                    <div style={{ padding: '20px', textAlign: 'center', opacity: 0.5, fontSize: '12px' }}>Loading popular extensions...</div>
+                                )
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
+            <style>{`
+                .extension-item:hover {
+                    background: rgba(255, 255, 255, 0.03);
+                }
+                .codicon-modifier-spin {
+                    animation: codicon-spin 1s linear infinite;
+                }
+                @keyframes codicon-spin {
+                    from { transform: rotate(0deg); }
+                    to { transform: rotate(360deg); }
+                }
+            `}</style>
         </div>
     );
 };

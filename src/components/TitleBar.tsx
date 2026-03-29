@@ -6,7 +6,6 @@ const TitleBar: React.FC = () => {
     const [activeMenu, setActiveMenu] = useState<string | null>(null);
     const agentModel = useStore(state => state.agentModel);
     const ollamaStatus = useStore(state => state.ollamaStatus);
-    const cyberMode = useStore(state => state.cyberMode);
 
     const menus = [
         { label: 'File', items: ['New File', 'New Window', 'Open...', 'Save', 'Close Editor'] },
@@ -47,9 +46,13 @@ const TitleBar: React.FC = () => {
         <div id="title-bar" data-tauri-drag-region>
             <div className="title-bar-left">
                 <div className="window-controls-spacer"></div>
-                <div className="navigation-controls" style={{ display: 'flex', gap: '4px', marginRight: '12px', opacity: 0.6 }}>
-                    <i className="codicon codicon-arrow-left hoverable" title="Go Back"></i>
-                    <i className="codicon codicon-arrow-right hoverable" title="Go Forward"></i>
+                <div className="navigation-controls" style={{ display: 'flex', gap: '2px', marginRight: '8px' }}>
+                    <div className="nav-btn hoverable" title="Go Back">
+                        <i className="codicon codicon-arrow-left"></i>
+                    </div>
+                    <div className="nav-btn hoverable" title="Go Forward">
+                        <i className="codicon codicon-arrow-right"></i>
+                    </div>
                 </div>
                 <div className="menu-items-container">
                     {menus.map(menu => (
@@ -89,7 +92,7 @@ const TitleBar: React.FC = () => {
 
             <div className="title-bar-right" style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '12px' }}>
                 {/* AI Model Badge */}
-                <div className={`ai-model-badge ${cyberMode ? 'cyber' : ''}`}>
+                <div className="ai-model-badge">
                     <i className="codicon codicon-sparkle"></i>
                     <span>{(agentModel.split('|')[1] || agentModel).split(':')[0].toUpperCase()}</span>
                     {agentModel.toLowerCase().includes('ollama') && (

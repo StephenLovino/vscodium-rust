@@ -74,7 +74,7 @@ const TerminalGroupView: React.FC<TerminalGroupViewProps> = ({ groupId, active }
                 height: '100%', 
                 flexDirection: 'row', 
                 overflow: 'hidden',
-                background: '#1e1e1e',
+                background: 'transparent',
                 position: 'relative'
             }}
         >
@@ -91,17 +91,21 @@ const TerminalGroupView: React.FC<TerminalGroupViewProps> = ({ groupId, active }
                         <div 
                             onMouseDown={onMouseDown(index)}
                             style={{
-                                width: '4px',
+                                width: '1px',
                                 cursor: 'col-resize',
-                                background: draggingIndex === index ? 'var(--vscode-sash-hoverBorder, #007acc)' : 'transparent',
+                                background: draggingIndex === index ? 'var(--vscode-sash-hoverBorder, #007acc)' : 'var(--vscode-panel-border, rgba(128, 128, 128, 0.35))',
                                 zIndex: 10,
-                                transition: 'background 0.2s'
+                                position: 'relative'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'var(--vscode-sash-hoverBorder, #007acc)'}
-                            onMouseLeave={(e) => {
-                                if (draggingIndex !== index) e.currentTarget.style.background = 'transparent';
-                            }}
-                        />
+                        >
+                            <div style={{
+                                position: 'absolute',
+                                left: '-2px',
+                                width: '5px',
+                                height: '100%',
+                                cursor: 'col-resize'
+                            }} />
+                        </div>
                     )}
                 </React.Fragment>
             ))}

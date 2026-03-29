@@ -5,6 +5,7 @@ import Workbench from './components/Workbench';
 import StatusBar from './components/StatusBar';
 import './styles.css';
 import './panes.css';
+import { TrustDialog } from './components/TrustDialog';
 import { initSearch } from './search';
 import { initStatusBar } from './status_bar';
 import { initExtensions } from './extensions';
@@ -16,6 +17,7 @@ import { initScm } from './scm';
 import { initDebugUI } from './debug_ui';
 import { initTerminal } from './terminal';
 import { initAgent } from './agent';
+import { initTheme } from './theme_engine';
 
 const ContextMenu: React.FC = () => {
     const isOpen = useStore(state => state.isContextMenuOpen);
@@ -57,13 +59,15 @@ const App: React.FC = () => {
         initCommands();
         initSearch();
         initStatusBar();
-        initExtensions();
-        initSpecs();
-        initMobile();
-        initScm();
-        initDebugUI();
-        initTerminal();
-        initAgent();
+        initTheme();
+        initExtensions().then(() => {
+            initSpecs();
+            initMobile();
+            initScm();
+            initDebugUI();
+            initTerminal();
+            initAgent();
+        });
         
         // --- Platform Detection for Native Feel ---
         const ua = navigator.userAgent.toLowerCase();
@@ -78,6 +82,13 @@ const App: React.FC = () => {
 
         const { refreshAvailableModels } = useStore.getState();
         refreshAvailableModels();
+
+        // Listen for reload-window from backend
+        import('@tauri-apps/api/event').then(({ listen }) => {
+            listen('reload-window', () => {
+                window.location.reload();
+            });
+        });
     }, []);
 
     return (
@@ -114,6 +125,7 @@ const App: React.FC = () => {
             )}
             
             <ContextMenu />
+            <TrustDialog />
         </div>
     );
 };

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { computeDiffBlocks, patchContentSelective } from './services/DiffService';
+import { terminalManager, getVSCodeTheme } from './terminal';
 
 interface EditorTab {
     id: string;
@@ -119,16 +120,30 @@ interface AppState {
     isDebugToolbarOpen: boolean;
     contextMenuPosition: { x: number, y: number };
     commandPaletteQuery: string;
-    cyberMode: boolean;
     ollamaUrl: string;
     isPullingModel: boolean;
     pullProgress: number;
     attachedContext: AttachedContext[];
     pendingChanges: PendingChange[];
 
+    // Extension State
+    installedExtensions: any[];
+    marketExtensions: any[];
+    popularExtensions: any[];
+    isSearchingExtensions: boolean;
+    extensionTrustRequest: { publisher: string, name: string, version: string, onResolve: (trusted: boolean) => void } | null;
+    trustedPublishers: string[];
+    selectedExtensionId: string | null;
+    extensionDetails: Record<string, any>;
+
     // Project Memory (spec-kit / AGENTS.md / CLAUDE.md)
     projectMemory: string;
     memoryFiles: string[];
+
+    // Agent Task Tracking
+    agentTask: AgentTask | null;
+    agentFiles: string[];
+    agentSteps: AgentStep[];
 
     // Actions
     toggleSidebar: () => void;
@@ -160,7 +175,6 @@ interface AppState {
     setActiveTab: (id: string) => void;
     updateTabContent: (id: string, content: string) => void;
     saveActiveFile: () => Promise<void>;
-    setCyberMode: (enabled: boolean) => void;
     setOllamaUrl: (url: string) => void;
     checkOllamaStatus: () => Promise<void>;
     pullOllamaModel: (name: string) => Promise<void>;
@@ -211,6 +225,35 @@ interface AppState {
     renameTerminalGroup: (groupId: string, name: string) => void;
     closeTerminalGroup: (groupId: string) => Promise<void>;
     updateTerminalSplitWeights: (groupId: string, weights: number[]) => void;
+
+    // Agent Tasks
+    setAgentTask: (task: AgentTask | null) => void;
+    setAgentFiles: (files: string[]) => void;
+    setAgentSteps: (steps: AgentStep[]) => void;
+
+    // Extension Actions
+    setInstalledExtensions: (exts: any[]) => void;
+    setMarketExtensions: (exts: any[]) => void;
+    setSearchingExtensions: (searching: boolean) => void;
+    refreshInstalledExtensions: () => Promise<void>;
+    addInstalledExtension: (extension: any) => void;
+    refreshPopularExtensions: () => Promise<void>;
+    searchExtensions: (query: string) => Promise<void>;
+    requestExtensionTrust: (publisher: string, name: string, version: string) => Promise<boolean>;
+    resolveExtensionTrust: (trusted: boolean, always?: boolean) => void;
+    addTrustedPublisher: (publisher: string) => void;
+    removeTrustedPublisher: (publisher: string) => void;
+    setSelectedExtensionId: (id: string | null) => void;
+    fetchExtensionDetails: (id: string) => Promise<void>;
+    installExtension: (publisher: string, name: string, version: string) => Promise<boolean>;
+    uninstallExtension: (publisher: string, name: string) => Promise<boolean>;
+}
+
+export interface AgentTask {
+    title: string;
+    summary: string;
+    status: 'running' | 'completed' | 'error';
+    progress: number;
 }
 
 function detectLanguage(filename: string): string {
@@ -233,7 +276,7 @@ export const useStore = create<AppState>((set, get) => ({
     isBottomPanelOpen: false,
     activePanelTab: 'TERMINAL',
     isRightSidebarOpen: false,
-    theme: 'vs-dark',
+    theme: localStorage.getItem('active-monaco-theme') || 'vs-dark',
     sidebarWidth: parseInt(localStorage.getItem('sidebarWidth') || '260'),
     rightSidebarWidth: parseInt(localStorage.getItem('rightSidebarWidth') || '300'),
     bottomPanelHeight: parseInt(localStorage.getItem('bottomPanelHeight') || '240'),
@@ -247,6 +290,7 @@ export const useStore = create<AppState>((set, get) => ({
     iconThemeMapping: null,
     agentMode: 'Planning',
     agentModel: 'Google|gemini-1.5-pro', // Match internal value format
+    trustedPublishers: JSON.parse(localStorage.getItem('trustedPublishers') || '[]'),
     activeRoot: localStorage.getItem('activeRoot'),
     activeEditorPath: '',
     activeRootName: localStorage.getItem('activeRootName'),
@@ -268,7 +312,6 @@ export const useStore = create<AppState>((set, get) => ({
     isDebugToolbarOpen: false,
     contextMenuPosition: { x: 0, y: 0 },
     commandPaletteQuery: '',
-    cyberMode: false,
     ollamaUrl: 'http://localhost:11434',
     isPullingModel: false,
     pullProgress: 0,
@@ -283,6 +326,20 @@ export const useStore = create<AppState>((set, get) => ({
     projectMemory: '',
     memoryFiles: [],
 
+    // Agent Tasks
+    agentTask: null,
+    agentFiles: [],
+    agentSteps: [],
+
+    // Initial Extension State
+    installedExtensions: [],
+    marketExtensions: [],
+    popularExtensions: [],
+    isSearchingExtensions: false,
+    extensionTrustRequest: null,
+    selectedExtensionId: null,
+    extensionDetails: {},
+
     // Actions
     setProjectMemory: (content, files = []) => set(() => ({ projectMemory: content, memoryFiles: files })),
     toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen })),
@@ -290,7 +347,13 @@ export const useStore = create<AppState>((set, get) => ({
     toggleBottomPanel: () => set((state) => ({ isBottomPanelOpen: !state.isBottomPanelOpen })),
     setActivePanelTab: (tab) => set(() => ({ activePanelTab: tab, isBottomPanelOpen: true })),
     toggleRightSidebar: () => set((state) => ({ isRightSidebarOpen: !state.isRightSidebarOpen })),
-    setTheme: (theme) => set({ theme }),
+    setTheme: (theme) => {
+        set({ theme });
+        localStorage.setItem('active-monaco-theme', theme);
+        if (['vs', 'vs-dark', 'hc-black'].includes(theme)) {
+            localStorage.removeItem('active-theme-path');
+        }
+    },
     setSidebarWidth: (sidebarWidth) => {
         localStorage.setItem('sidebarWidth', sidebarWidth.toString());
         set({ sidebarWidth });
@@ -324,7 +387,6 @@ export const useStore = create<AppState>((set, get) => ({
     setActiveDevice: (activeDevice) => set({ activeDevice }),
     setEmulators: (emulators) => set({ emulators }),
     setExtensionContributions: (extensionContributions) => set({ extensionContributions }),
-    setCyberMode: (enabled) => set({ cyberMode: enabled }),
     setOllamaUrl: (url: string) => {
         set({ ollamaUrl: url });
         invoke('set_ollama_url', { url }).catch(console.error);
@@ -844,6 +906,9 @@ export const useStore = create<AppState>((set, get) => ({
         const instanceId = `term-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
         const name = shell ? shell.split(/[\\/]/).pop() || 'shell' : 'terminal';
         
+        // Create the terminal instance in the manager
+        await terminalManager.createTerminal(shell, getVSCodeTheme(), instanceId);
+
         const newGroup: TerminalGroup = {
             id,
             name: `${name}`,
@@ -864,6 +929,13 @@ export const useStore = create<AppState>((set, get) => ({
     splitTerminal: async (groupId, instanceId) => {
         const newInstanceId = `term-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
         
+        // Get shell of current instance if possible
+        const currentInstance = terminalManager.terminals.get(instanceId);
+        const shell = currentInstance?.shell;
+
+        // Create the terminal instance in the manager
+        await terminalManager.createTerminal(shell, getVSCodeTheme(), newInstanceId);
+
         set((state) => {
             const groups = state.terminalGroups.map(g => {
                 if (g.id === groupId) {
@@ -882,6 +954,7 @@ export const useStore = create<AppState>((set, get) => ({
     },
 
     closeTerminalInstance: async (groupId, instanceId) => {
+        await terminalManager.closeTerminal(instanceId);
         set((state) => {
             const groups = state.terminalGroups.map(g => {
                 if (g.id === groupId) {
@@ -921,6 +994,12 @@ export const useStore = create<AppState>((set, get) => ({
     })),
 
     closeTerminalGroup: async (groupId) => {
+        const group = get().terminalGroups.find(g => g.id === groupId);
+        if (group) {
+            for (const instanceId of group.instances) {
+                await terminalManager.closeTerminal(instanceId);
+            }
+        }
         set((state) => {
             const nextGroups = state.terminalGroups.filter(g => g.id !== groupId);
             let nextActiveId = state.activeTerminalGroupId;
@@ -939,6 +1018,131 @@ export const useStore = create<AppState>((set, get) => ({
             g.id === groupId ? { ...g, splitWeights: weights } : g
         )
     })),
+
+    setAgentTask: (agentTask) => set({ agentTask }),
+    setAgentFiles: (agentFiles) => set({ agentFiles }),
+    setAgentSteps: (agentSteps) => set({ agentSteps }),
+
+    // Extension Actions Implementation
+    setInstalledExtensions: (installedExtensions) => set({ installedExtensions }),
+    setMarketExtensions: (marketExtensions) => set({ marketExtensions }),
+    setSearchingExtensions: (isSearchingExtensions) => set({ isSearchingExtensions }),
+    addInstalledExtension: (extension) => set((state) => ({ 
+        installedExtensions: [...state.installedExtensions.filter(e => e.id !== extension.id), extension] 
+    })),
+
+    refreshInstalledExtensions: async () => {
+        try {
+            const extensions = await invoke<any[]>("get_running_extensions");
+            set({ installedExtensions: extensions });
+            
+            // Also refresh icon theme and contributions as they depend on extensions
+            const iconThemeMapping = await invoke<any>("get_icon_theme_mapping");
+            if (iconThemeMapping && iconThemeMapping.iconDefinitions) {
+                set({ iconThemeMapping });
+            }
+
+            const contributions = await invoke<any>("get_extension_contributions");
+            if (contributions) {
+                set({ extensionContributions: contributions });
+            }
+        } catch (err) {
+            console.error("Failed to refresh installed extensions:", err);
+        }
+    },
+
+    refreshPopularExtensions: async () => {
+        try {
+            const extensions = await invoke<any[]>("get_popular_extensions");
+            set({ popularExtensions: extensions });
+        } catch (err) {
+            console.error("Failed to refresh popular extensions:", err);
+        }
+    },
+
+    searchExtensions: async (query: string) => {
+        if (!query) {
+            set({ marketExtensions: [], isSearchingExtensions: false });
+            return;
+        }
+        set({ isSearchingExtensions: true });
+        try {
+            const results = await invoke<any[]>("search_extensions", { query });
+            set({ marketExtensions: results, isSearchingExtensions: false });
+        } catch (err) {
+            console.error("Marketplace search failed:", err);
+            set({ isSearchingExtensions: false });
+        }
+    },
+ 
+    requestExtensionTrust: (publisher, name, version) => {
+        // Check if publisher is already trusted
+        if (get().trustedPublishers.includes(publisher)) {
+            return Promise.resolve(true);
+        }
+ 
+        return new Promise((resolve) => {
+            set({ extensionTrustRequest: { publisher, name, version, onResolve: resolve } });
+        });
+    },
+
+    resolveExtensionTrust: (trusted, always) => {
+        const { extensionTrustRequest } = get();
+        if (extensionTrustRequest) {
+            if (trusted && always) {
+                get().addTrustedPublisher(extensionTrustRequest.publisher);
+            }
+            extensionTrustRequest.onResolve(trusted);
+            set({ extensionTrustRequest: null });
+        }
+    },
+
+    addTrustedPublisher: (publisher) => set((state) => {
+        const trustedPublishers = [...new Set([...state.trustedPublishers, publisher])];
+        localStorage.setItem('trustedPublishers', JSON.stringify(trustedPublishers));
+        return { trustedPublishers };
+    }),
+
+    removeTrustedPublisher: (publisher) => set((state) => {
+        const trustedPublishers = state.trustedPublishers.filter(p => p !== publisher);
+        localStorage.setItem('trustedPublishers', JSON.stringify(trustedPublishers));
+        return { trustedPublishers };
+    }),
+
+    setSelectedExtensionId: (id) => set({ selectedExtensionId: id }),
+
+    fetchExtensionDetails: async (id) => {
+        try {
+            const details = await invoke<any>("get_extension_details", { id });
+            set((state) => ({
+                extensionDetails: { ...state.extensionDetails, [id]: details }
+            }));
+        } catch (err) {
+            console.error("Failed to fetch extension details:", err);
+        }
+    },
+
+    installExtension: async (publisher, name, version) => {
+        try {
+            await invoke("install_extension", { publisher, name, version });
+            await get().refreshInstalledExtensions();
+            return true;
+        } catch (err) {
+            console.error("Installation failed:", err);
+            return false;
+        }
+    },
+
+    uninstallExtension: async (publisher, name) => {
+        try {
+            await invoke("uninstall_extension", { publisher, name });
+            await get().refreshInstalledExtensions();
+            return true;
+        } catch (err) {
+            console.error("Uninstallation failed:", err);
+            return false;
+        }
+    },
 }));
 
 function findNodeRecursive(nodes: FileEntry[], path: string): FileEntry | null {

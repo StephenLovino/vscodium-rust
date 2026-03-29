@@ -225,7 +225,7 @@ const RightSidebar: React.FC = () => {
         <aside 
             onDragOver={handleDragOver}
             onDrop={handleDrop}
-            className="right-sidebar antigravity-glass" id="right-sidebar">
+            className="right-sidebar glass-morphism" id="right-sidebar">
             <style>{`
                 .agent-message-container:hover .message-actions {
                     opacity: 1 !important;
@@ -321,7 +321,7 @@ const RightSidebar: React.FC = () => {
                             const target = e.currentTarget as HTMLElement;
                             const rect = target.getBoundingClientRect();
                             const menu = document.createElement('div');
-                            menu.className = 'antigravity-glass dropdown-menu';
+                            menu.className = 'glass-morphism dropdown-menu';
                             menu.style.cssText = `position:fixed; top:${rect.bottom + 5}px; right:${window.innerWidth - rect.right}px; z-index:10000; padding:4px; border-radius:8px; border:1px solid rgba(255,255,255,0.1); width:160px; background: rgba(30,30,35,0.95); backdrop-filter: blur(10px);`;
                             
                             const addItem = (label: string, icon: string, action: () => void) => {
@@ -356,7 +356,7 @@ const RightSidebar: React.FC = () => {
             {view === 'chat' && (
                 <div className="right-sidebar-content" style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', scrollbarWidth: 'thin' }}>
                     {/* Active Task Summary Card */}
-                    {(isAgentThinking || messages.length > 0) && (
+                    {useStore.getState().agentTask && (
                         <div className="task-summary-card" style={{
                             margin: '16px',
                             padding: '20px',
@@ -368,9 +368,9 @@ const RightSidebar: React.FC = () => {
                             gap: '12px'
                         }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>Integrating Antigravity IDE Features</div>
+                                <div style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>{useStore.getState().agentTask?.title}</div>
                                 <div style={{ 
-                                    background: isAgentThinking ? '#007acc' : '#16825d', 
+                                    background: useStore.getState().agentTask?.status === 'running' ? 'var(--vscode-button-background)' : '#16825d', 
                                     color: '#fff', 
                                     fontSize: '9px', 
                                     padding: '2px 8px', 
@@ -378,7 +378,7 @@ const RightSidebar: React.FC = () => {
                                     fontWeight: 700,
                                     textTransform: 'uppercase'
                                 }}>
-                                    {isAgentThinking ? 'Executing' : 'Completed'}
+                                    {useStore.getState().agentTask?.status === 'running' ? 'Executing' : 'Completed'}
                                 </div>
                             </div>
                             
@@ -387,32 +387,39 @@ const RightSidebar: React.FC = () => {
                                     width: '16px',
                                     height: '16px',
                                     border: '2px solid rgba(255,255,255,0.1)',
-                                    borderTop: '2px solid #007acc',
+                                    borderTop: '2px solid var(--vscode-button-background)',
                                     borderRadius: '50%',
-                                    animation: isAgentThinking ? 'spin 1s linear infinite' : 'none'
+                                    animation: useStore.getState().agentTask?.status === 'running' ? 'spin 1.5s linear infinite' : 'none'
                                 }}></div>
-                                <span>{isAgentThinking ? 'Updating UI components to match VS Code reference...' : 'Waiting for next task'}</span>
+                                <span style={{ lineHeight: '1.4' }}>{useStore.getState().agentTask?.summary}</span>
                             </div>
 
-                            <div style={{ marginTop: '4px' }}>
-                                <div style={{ fontSize: '10px', textTransform: 'uppercase', opacity: 0.4, marginBottom: '8px', fontWeight: 800 }}>Files Edited</div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    {[
-                                        '/Users/hades/Desktop/vscodium-rust/src/components/BottomPanel.tsx',
-                                        '/Users/hades/Desktop/vscodium-rust/src/components/StatusBar.tsx',
-                                        '/Users/hades/Desktop/vscodium-rust/src/components/terminal/TerminalView.tsx'
-                                    ].map(file => (
-                                        <div key={file} style={{ 
-                                            fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px', 
-                                            background: 'rgba(255,255,255,0.03)', padding: '4px 8px', borderRadius: '4px',
-                                            cursor: 'pointer'
-                                        }} onClick={() => invoke('open_file', { path: file })}>
-                                            <i className="codicon codicon-file-code" style={{ fontSize: '12px', opacity: 0.5 }}></i>
-                                            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.split('/').pop()}</span>
-                                        </div>
-                                    ))}
+                            {useStore.getState().agentFiles.length > 0 && (
+                                <div style={{ marginTop: '4px' }}>
+                                    <div style={{ 
+                                        fontSize: '10px', 
+                                        textTransform: 'uppercase', 
+                                        opacity: 0.4, 
+                                        marginBottom: '10px', 
+                                        fontWeight: 800,
+                                        letterSpacing: '0.05em'
+                                    }}>Files Patterned</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        {useStore.getState().agentFiles.map(file => (
+                                            <div key={file} style={{ 
+                                                fontSize: '11px', display: 'flex', alignItems: 'center', gap: '8px', 
+                                                background: 'rgba(255,255,255,0.03)', padding: '6px 10px', borderRadius: '6px',
+                                                cursor: 'pointer',
+                                                border: '1px solid rgba(255,255,255,0.03)'
+                                            }} onClick={() => invoke('open_file', { path: file })} className="hoverable-bg">
+                                                <i className="codicon codicon-file-code" style={{ fontSize: '12px', opacity: 0.4 }}></i>
+                                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.split('/').pop()}</span>
+                                                <i className="codicon codicon-link-external" style={{ fontSize: '10px', marginLeft: 'auto', opacity: 0.2 }}></i>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     )}
 

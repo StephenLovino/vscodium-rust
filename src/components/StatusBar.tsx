@@ -32,8 +32,8 @@ const StatusBar: React.FC = () => {
 
     return (
         <footer className="status-bar" style={{
-            backgroundColor: '#007acc', // VS Code Blue
-            color: '#ffffff',
+            backgroundColor: 'var(--vscode-statusBar-background, #007acc)',
+            color: 'var(--vscode-statusBar-foreground, #ffffff)',
             height: '22px',
             display: 'flex',
             justifyContent: 'space-between',
@@ -45,7 +45,7 @@ const StatusBar: React.FC = () => {
         }}>
             <div className="status-left" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
                 <div style={{ 
-                    background: '#16825d', 
+                    background: 'var(--vscode-statusBarItem-remoteBackground, #16825d)', 
                     height: '100%', 
                     display: 'flex', 
                     alignItems: 'center', 
@@ -65,8 +65,25 @@ const StatusBar: React.FC = () => {
                     <i className="codicon codicon-sync" style={{ fontSize: '12px' }}></i>
                 </div>
                 <div className="status-item hoverable" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 6px' }}>
-                    <i className="codicon codicon-error" style={{ fontSize: '12px', marginRight: '2px' }}></i>6
+                    <i className="codicon codicon-error" style={{ fontSize: '12px', marginRight: '2px' }}></i>0
                     <i className="codicon codicon-warning" style={{ fontSize: '12px', marginLeft: '6px', marginRight: '2px' }}></i>0
+                </div>
+                <div className="status-item hoverable" style={{ 
+                    cursor: 'pointer', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    height: '100%', 
+                    padding: '0 8px',
+                    marginLeft: '4px',
+                    borderLeft: '1px solid rgba(255,255,255,0.1)'
+                }}>
+                    <i className={`codicon codicon-sparkle`} style={{ 
+                        fontSize: '12px', 
+                        marginRight: '6px',
+                        color: useStore.getState().isAgentThinking ? '#4ade80' : 'rgba(255,255,255,0.7)',
+                        animation: useStore.getState().isAgentThinking ? 'spin 2s linear infinite' : 'none'
+                    }}></i>
+                    <span style={{ fontSize: '11px', opacity: 0.9 }}>{agentModel.split('|').pop()?.split(':')[0] || 'Agent'}</span>
                 </div>
             </div>
             <div className="status-right" style={{ display: 'flex', alignItems: 'center', height: '100%' }}>
@@ -78,10 +95,6 @@ const StatusBar: React.FC = () => {
                 <div className="status-item hoverable" style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>UTF-8</div>
                 <div className="status-item hoverable" onClick={handleOptimize} style={{ cursor: 'pointer', height: '100%', display: 'flex', alignItems: 'center', padding: '0 8px' }}>
                     <i className="codicon codicon-dashboard" style={{ fontSize: '12px', marginRight: '4px' }} />Optimize
-                </div>
-                <div className="status-item hoverable" onClick={toggleTheme} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', height: '100%', padding: '0 8px' }}>
-                    <i className="codicon codicon-color-mode" style={{ marginRight: '4px' }}></i>
-                    <span>{theme}</span>
                 </div>
             </div>
         </footer>

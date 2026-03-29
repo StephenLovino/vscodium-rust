@@ -97,6 +97,13 @@ function registerCoreCommands() {
                 // Implementation for git clone
             },
         },
+        {
+            id: 'terminal.new',
+            label: 'Terminal: New Terminal',
+            run: () => {
+                getStore().addTerminalGroup();
+            },
+        },
     ];
     
     // Expose the command registry so the React CommandPalette component can access it

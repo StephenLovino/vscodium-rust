@@ -82,7 +82,7 @@ const SearchView: React.FC = () => {
                             onClick={() => handleResultClick(result)}
                             style={{ 
                                 padding: '6px 0', 
-                                borderBottom: '1px solid rgba(255,255,255,0.05)', 
+                                borderBottom: '1px solid var(--vscode-panel-border)', 
                                 cursor: 'pointer',
                                 fontSize: '12px'
                             }}

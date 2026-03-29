@@ -4,9 +4,7 @@ import { getThemes, applyTheme } from '../theme_engine';
 import type { VscodeTheme } from '../theme_engine';
 
 const AgentSettingsView: React.FC = () => {
-    const cyberMode = useStore(state => state.cyberMode);
     const ollamaUrl = useStore(state => state.ollamaUrl);
-    const setCyberMode = useStore(state => state.setCyberMode);
     const setOllamaUrl = useStore(state => state.setOllamaUrl);
     const ollamaStatus = useStore(state => state.ollamaStatus);
     const refreshModels = useStore(state => state.refreshAvailableModels);
@@ -29,42 +27,12 @@ const AgentSettingsView: React.FC = () => {
     const [newMcpUrl, setNewMcpUrl] = useState('');
     const [isAddingMcp, setIsAddingMcp] = useState(false);
 
-    const [themes, setThemes] = useState<VscodeTheme[]>([]);
-    const [activeThemePath, setActiveThemePath] = useState(localStorage.getItem('active-theme-path') || '');
-
     useEffect(() => {
-        getThemes().then(setThemes).catch(console.error);
         listMcpServers().catch(console.error);
     }, []);
 
-    const handleThemeChange = async (path: string) => {
-        setActiveThemePath(path);
-        const monacoTheme = await applyTheme(path);
-        setTheme(monacoTheme);
-    };
-
     return (
         <div className="agent-settings-view" style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '20px', height: '100%', overflowY: 'auto' }}>
-            <section>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--vscode-sideBarSectionHeader-foreground)', marginBottom: '12px', textTransform: 'uppercase' }}>
-                    Appearance & Theme
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    <label style={{ fontSize: '11px', opacity: 0.8 }}>Color Theme</label>
-                    <select 
-                        value={activeThemePath}
-                        onChange={(e) => handleThemeChange(e.target.value)}
-                        style={{ background: 'var(--vscode-dropdown-background)', color: 'var(--vscode-dropdown-foreground)', border: '1px solid var(--vscode-dropdown-border)', padding: '4px', fontSize: '12px', cursor: 'pointer', position: 'relative', zIndex: 1 }}
-                    >
-                        <option value="">Select a theme...</option>
-                        {themes.map(t => (
-                            <option key={t.id} value={t.path}>
-                                {t.label} ({t.extensionName})
-                            </option>
-                        ))}
-                    </select>
-                </div>
-            </section>
 
             <section>
                 <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--vscode-sideBarSectionHeader-foreground)', marginBottom: '12px', textTransform: 'uppercase' }}>
@@ -120,7 +88,7 @@ const AgentSettingsView: React.FC = () => {
                         </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px', padding: '10px', background: 'var(--vscode-sideBar-background)', border: '1px solid var(--vscode-panel-border)', borderRadius: '2px' }}>
                         <label style={{ fontSize: '11px', fontWeight: 600, opacity: 0.7 }}>Pull New Model</label>
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <input 
@@ -128,7 +96,7 @@ const AgentSettingsView: React.FC = () => {
                                 placeholder="e.g. deepseek-v3"
                                 value={pullInput}
                                 onChange={(e) => setPullInput(e.target.value)}
-                                style={{ flex: 1, background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                                style={{ flex: 1, background: 'var(--vscode-input-background)', color: 'var(--vscode-input-foreground)', border: '1px solid var(--vscode-input-border)', padding: '4px 8px', fontSize: '11px' }}
                                 disabled={isPullingModel}
                             />
                             <button 
@@ -140,13 +108,13 @@ const AgentSettingsView: React.FC = () => {
                                 }}
                                 disabled={isPullingModel || !pullInput}
                                 style={{ 
-                                    background: isPullingModel ? 'rgba(59, 130, 246, 0.2)' : 'var(--vscode-button-background)', 
-                                    color: '#fff', 
+                                    background: isPullingModel ? 'var(--vscode-button-secondaryBackground)' : 'var(--vscode-button-background)', 
+                                    color: 'var(--vscode-button-foreground)', 
                                     border: 'none', 
                                     padding: '4px 12px', 
                                     fontSize: '11px', 
                                     cursor: isPullingModel ? 'wait' : 'pointer',
-                                    borderRadius: '4px',
+                                    borderRadius: '2px',
                                     fontWeight: 600
                                 }}
                             >
@@ -174,12 +142,12 @@ const AgentSettingsView: React.FC = () => {
                 </div>
 
                 {isAddingMcp && (
-                    <div style={{ marginBottom: '16px', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ marginBottom: '16px', padding: '10px', background: 'var(--vscode-sideBar-background)', border: '1px solid var(--vscode-panel-border)', borderRadius: '2px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <input 
                             placeholder="Server Name (e.g. filesystem)"
                             value={newMcpName}
                             onChange={e => setNewMcpName(e.target.value)}
-                            style={{ background: 'rgba(0,0,0,0.2)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', padding: '4px 8px', fontSize: '11px', borderRadius: '4px' }}
+                            style={{ background: 'var(--vscode-input-background)', color: 'var(--vscode-input-foreground)', border: '1px solid var(--vscode-input-border)', padding: '4px 8px', fontSize: '11px' }}
                         />
                         <select 
                             value={newMcpType}
@@ -236,8 +204,8 @@ const AgentSettingsView: React.FC = () => {
                         <div style={{ fontSize: '11px', opacity: 0.4, fontStyle: 'italic', textAlign: 'center', padding: '10px' }}>No MCP servers configured.</div>
                     )}
                     {mcpServers.map(server => (
-                        <div key={server.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                            <i className="codicon codicon-server" style={{ fontSize: '14px', color: '#4ade80', opacity: 0.8 }}></i>
+                        <div key={server.name} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'var(--vscode-sideBar-background)', border: '1px solid var(--vscode-panel-border)', borderRadius: '2px' }}>
+                            <i className="codicon codicon-server" style={{ fontSize: '14px', color: '#89d185', opacity: 0.8 }}></i>
                             <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
                                 <span style={{ fontSize: '12px', fontWeight: 600 }}>{server.name}</span>
                                 <span style={{ fontSize: '10px', opacity: 0.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -255,28 +223,7 @@ const AgentSettingsView: React.FC = () => {
                 </div>
             </section>
 
-            <section>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--vscode-sideBarSectionHeader-foreground)', marginBottom: '12px', textTransform: 'uppercase' }}>
-                    Cybersecurity Mode
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <input 
-                            type="checkbox" 
-                            checked={cyberMode}
-                            onChange={(e) => setCyberMode(e.target.checked)}
-                            style={{ cursor: 'pointer' }}
-                        />
-                        <label style={{ fontSize: '12px', fontWeight: 500, color: cyberMode ? '#f87171' : 'inherit' }}>
-                            Enable Offensive Capabilities
-                        </label>
-                    </div>
-                    <p style={{ fontSize: '11px', opacity: 0.6, margin: 0, fontStyle: 'italic' }}>
-                        Enables exploit generation, malware research, and advanced reverse engineering tools for the AI agent.
-                    </p>
-                </div>
-            </section>
-        </div>
+         </div>
     );
 };
 

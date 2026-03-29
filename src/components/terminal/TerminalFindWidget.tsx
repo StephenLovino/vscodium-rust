@@ -52,20 +52,21 @@ const TerminalFindWidget: React.FC<TerminalFindWidgetProps> = ({ searchAddon, vi
 
     return (
         <div 
-            className="terminal-find-widget"
+            className="terminal-find-widget glass-panel"
             style={{
                 position: 'absolute',
                 top: '0',
                 right: '40px',
                 zIndex: 100,
-                background: 'var(--vscode-editorWidget-background, #252526)',
-                border: '1px solid var(--vscode-widget-border, #454545)',
+                background: 'rgba(30, 30, 31, 0.85)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
                 display: 'flex',
                 alignItems: 'center',
-                padding: '4px 6px',
-                gap: '4px',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
-                borderRadius: '0 0 3px 3px'
+                padding: '6px 10px',
+                gap: '8px',
+                boxShadow: 'var(--shadow-macos)',
+                borderRadius: '0 0 8px 8px'
             }}
         >
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -76,7 +77,6 @@ const TerminalFindWidget: React.FC<TerminalFindWidgetProps> = ({ searchAddon, vi
                     value={searchTerm}
                     onChange={(e) => {
                         setSearchTerm(e.target.value);
-                        // Search as we type
                         if (searchAddon && e.target.value) {
                             searchAddon.findNext(e.target.value, {
                                 caseSensitive: isCaseSensitive,
@@ -88,29 +88,29 @@ const TerminalFindWidget: React.FC<TerminalFindWidgetProps> = ({ searchAddon, vi
                     }}
                     onKeyDown={handleKeyDown}
                     style={{
-                        background: 'var(--vscode-input-background, #3c3c3c)',
-                        color: 'var(--vscode-input-foreground, #cccccc)',
-                        border: '1px solid var(--vscode-input-border, transparent)',
-                        padding: '2px 30px 2px 6px',
-                        fontSize: '11px',
-                        width: '180px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        color: '#fff',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        padding: '4px 35px 4px 10px',
+                        fontSize: '12px',
+                        width: '200px',
+                        borderRadius: '6px',
                         outline: 'none'
                     }}
                 />
                 
-                {/* Search Options (Mini icons inside input) */}
-                <div style={{ position: 'absolute', right: '4px', display: 'flex', gap: '2px' }}>
+                <div style={{ position: 'absolute', right: '6px', display: 'flex', gap: '4px' }}>
                     <i 
                         className="codicon codicon-case-sensitive" 
                         title="Match Case"
                         onClick={() => setIsCaseSensitive(!isCaseSensitive)}
                         style={{ 
-                            fontSize: '12px', 
+                            fontSize: '14px', 
                             cursor: 'pointer',
                             opacity: isCaseSensitive ? 1 : 0.4,
-                            padding: '2px',
-                            background: isCaseSensitive ? 'rgba(0, 122, 204, 0.4)' : 'transparent',
-                            borderRadius: '2px'
+                            padding: '3px',
+                            color: isCaseSensitive ? '#3b82f6' : 'inherit',
+                            transition: 'all 0.2s'
                         }}
                     ></i>
                     <i 
@@ -118,12 +118,12 @@ const TerminalFindWidget: React.FC<TerminalFindWidgetProps> = ({ searchAddon, vi
                         title="Match Whole Word"
                         onClick={() => setIsWholeWord(!isWholeWord)}
                         style={{ 
-                            fontSize: '12px', 
+                            fontSize: '14px', 
                             cursor: 'pointer',
                             opacity: isWholeWord ? 1 : 0.4,
-                            padding: '2px',
-                            background: isWholeWord ? 'rgba(0, 122, 204, 0.4)' : 'transparent',
-                            borderRadius: '2px'
+                            padding: '3px',
+                            color: isWholeWord ? '#3b82f6' : 'inherit',
+                            transition: 'all 0.2s'
                         }}
                     ></i>
                     <i 
@@ -131,12 +131,12 @@ const TerminalFindWidget: React.FC<TerminalFindWidgetProps> = ({ searchAddon, vi
                         title="Use Regular Expression"
                         onClick={() => setIsRegex(!isRegex)}
                         style={{ 
-                            fontSize: '12px', 
+                            fontSize: '14px', 
                             cursor: 'pointer',
                             opacity: isRegex ? 1 : 0.4,
-                            padding: '2px',
-                            background: isRegex ? 'rgba(0, 122, 204, 0.4)' : 'transparent',
-                            borderRadius: '2px'
+                            padding: '3px',
+                            color: isRegex ? '#3b82f6' : 'inherit',
+                            transition: 'all 0.2s'
                         }}
                     ></i>
                 </div>

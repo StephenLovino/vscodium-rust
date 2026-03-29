@@ -111,3 +111,22 @@ pub async fn install_extension(
     
     Ok(format!("{}.{}", publisher, name))
 }
+pub async fn get_extension_details(publisher: String, name: String) -> Result<serde_json::Value> {
+    let client = Client::new();
+    let url = format!("https://open-vsx.org/api/{}/{}", urlencoding::encode(&publisher), urlencoding::encode(&name));
+    let response = client.get(url).send().await?;
+    let mut data: serde_json::Value = response.json().await?;
+    
+    // Try to fetch README content if it exists in files
+    if let Some(readme_url) = data.get("files").and_then(|f| f.get("readme")).and_then(|r| r.as_str()) {
+        if let Ok(readme_response) = client.get(readme_url).send().await {
+            if let Ok(readme_text) = readme_response.text().await {
+                if let Some(obj) = data.as_object_mut() {
+                    obj.insert("readme".to_string(), serde_json::Value::String(readme_text));
+                }
+            }
+        }
+    }
+    
+    Ok(data)
+}

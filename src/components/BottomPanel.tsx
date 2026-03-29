@@ -1,15 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { useStore } from '../store';
-import EmulatorPanel from './EmulatorPanel';
-import MitmPanel from './MitmPanel';
-import { terminalManager } from '../terminal';
 import TerminalView from './terminal/TerminalView';
-
-interface TerminalTab {
-    id: string;
-    name: string;
-}
-
 
 const BottomPanel: React.FC = () => {
     const isOpen = useStore(state => state.isBottomPanelOpen);
@@ -23,89 +14,139 @@ const BottomPanel: React.FC = () => {
     const splitTerminal = useStore(state => state.splitTerminal);
     
     const activeGroup = terminalGroups.find(g => g.id === activeTerminalGroupId);
+    const agentTask = useStore(state => state.agentTask);
 
     if (!isOpen) return null;
 
     return (
-        <footer className="bottom-panel" id="bottom-panel" style={{
-            display: 'flex',
-            flexDirection: 'column',
-            background: '#1e1e1e', // Match VS Code Dark
-            color: '#cccccc',
-            borderTop: '1px solid #333'
-        }}>
+        <div 
+            className="bottom-panel"
+            style={{ 
+                height: '300px',
+                width: '100%',
+                background: 'var(--vscode-panel-background)',
+                borderTop: '1px solid var(--vscode-panel-border)',
+                display: 'flex',
+                flexDirection: 'column',
+                zIndex: 10,
+                position: 'relative',
+                overflow: 'hidden'
+            }}
+        >
+            {/* Header / Tabs */}
             <div className="panel-header" style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 height: '35px',
                 padding: '0 8px',
-                borderBottom: '1px solid #333',
+                borderBottom: '1px solid var(--vscode-panel-border)',
+                background: 'var(--vscode-panel-background)',
                 fontSize: '11px',
-                textTransform: 'uppercase'
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
             }}>
-                <div className="panel-tabs" style={{ display: 'flex', gap: '16px', height: '100%', alignItems: 'center' }}>
+                <div className="panel-tabs" style={{ display: 'flex', gap: '2px', height: '100%', alignItems: 'center' }}>
                     {['Problems', 'Output', 'Debug Console', 'Terminal', 'Ports'].map(tab => (
                         <div 
                             key={tab}
                             className={`panel-tab ${activeTab === tab.toUpperCase() ? 'active' : ''}`} 
                             onClick={() => setActiveTab(tab.toUpperCase() as any)}
-                            style={{ 
-                                cursor: 'pointer', 
-                                borderBottom: activeTab === tab.toUpperCase() ? '1px solid #ffffff' : '1px solid transparent',
-                                height: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                opacity: activeTab === tab.toUpperCase() ? 1 : 0.6,
-                                padding: '0 4px',
-                                gap: '6px'
-                            }}
                         >
                             {tab}
                             {tab === 'Problems' && (
                                 <span style={{ 
-                                    background: '#007acc', 
+                                    background: 'var(--antigravity-accent)', 
                                     color: '#ffffff', 
-                                    padding: '1px 6px', 
+                                    padding: '0px 6px', 
                                     borderRadius: '10px', 
-                                    fontSize: '10px',
-                                    fontWeight: 700
-                                }}>6</span>
+                                    fontSize: '9px',
+                                    fontWeight: 700,
+                                    height: '14px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    marginLeft: '6px'
+                                }}>0</span>
                             )}
                         </div>
                     ))}
                 </div>
 
-                <div className="panel-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="panel-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '12px' }}>
                     {activeTab === 'TERMINAL' && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div className="toolbar-item" style={{ display: 'flex', alignItems: 'center', gap: '4px', opacity: 0.8 }}>
-                                <i className="codicon codicon-terminal" style={{ fontSize: '14px' }}></i>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <div className="toolbar-item" style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '6px', 
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: 'rgba(255,255,255,0.05)',
+                                fontSize: '11px',
+                                cursor: 'pointer',
+                                color: '#ccc'
+                            }}>
+                                <i className="codicon codicon-terminal" style={{ fontSize: '13px', opacity: 0.7 }}></i>
                                 <span>zsh</span>
-                                <i className="codicon codicon-chevron-down" style={{ fontSize: '12px' }}></i>
+                                <i className="codicon codicon-chevron-down" style={{ fontSize: '10px', opacity: 0.5 }}></i>
                             </div>
-                            <div className="toolbar-item" onClick={() => addTerminalGroup()} title="New Terminal"><i className="codicon codicon-add" style={{ fontSize: '16px' }}></i></div>
-                            <div className="toolbar-item" onClick={() => activeGroup && splitTerminal(activeGroup.id, activeGroup.activeInstanceId)} title="Split Terminal"><i className="codicon codicon-split-horizontal" style={{ fontSize: '16px' }}></i></div>
-                            <div className="toolbar-item" title="Kill Terminal"><i className="codicon codicon-trash" style={{ fontSize: '16px' }}></i></div>
-                            <div className="toolbar-item"><i className="codicon codicon-broadcast" style={{ fontSize: '16px' }}></i></div>
-                            <div className="toolbar-item"><i className="codicon codicon-more" style={{ fontSize: '16px' }}></i></div>
+                            <div className="toolbar-icon" onClick={() => addTerminalGroup()} title="New Terminal"><i className="codicon codicon-add"></i></div>
+                            <div className="toolbar-icon" onClick={() => activeGroup && splitTerminal(activeGroup.id, activeGroup.activeInstanceId)} title="Split Terminal"><i className="codicon codicon-split-horizontal"></i></div>
+                            <div className="toolbar-icon" title="Kill Terminal"><i className="codicon codicon-trash"></i></div>
                         </div>
                     )}
-                    <span style={{ height: '20px', width: '1px', background: '#444', margin: '0 4px' }}></span>
-                    <div className="toolbar-item" title="Maximize Panel Size"><i className="codicon codicon-chevron-up" style={{ fontSize: '16px' }}></i></div>
-                    <div className="toolbar-item" title="Close Panel" onClick={toggleBottomPanel}><i className="codicon codicon-close" style={{ fontSize: '16px' }}></i></div>
+                    <span style={{ height: '14px', width: '1px', background: 'rgba(255,255,255,0.1)', margin: '0 4px' }}></span>
+                    <div className="toolbar-icon" title="Maximize Panel Size"><i className="codicon codicon-chevron-up"></i></div>
+                    <div className="toolbar-icon" title="Close Panel" onClick={toggleBottomPanel}><i className="codicon codicon-close"></i></div>
                 </div>
             </div>
 
-            <div className="panel-content" id="panel-content" style={{ flex: 1, overflow: 'hidden' }}>
+            {/* Content Area */}
+            <div className="panel-content" style={{ flex: 1, overflow: 'hidden', background: '#1e1e1e' }}>
                 {activeTab === 'TERMINAL' && <TerminalView />}
-                {['PROBLEMS', 'OUTPUT', 'DEBUG CONSOLE', 'PORTS'].includes(activeTab) && (
-                    <div style={{ padding: '20px', opacity: 0.5, fontSize: '12px', textAlign: 'center' }}>
+                {activeTab === 'OUTPUT' && (
+                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '8px 16px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <select style={{ background: 'transparent', color: '#ccc', border: 'none', fontSize: '11px', cursor: 'pointer', outline: 'none' }}>
+                                <option>Main</option>
+                                <option>Extension Host</option>
+                                <option>Tasks</option>
+                            </select>
+                            <div style={{ display: 'flex', gap: '8px', color: '#666' }}>
+                                <i className="codicon codicon-clear-all" style={{ fontSize: '12px', cursor: 'pointer' }}></i>
+                                <i className="codicon codicon-lock" style={{ fontSize: '12px', cursor: 'pointer' }}></i>
+                            </div>
+                        </div>
+                        <div style={{ padding: '12px 16px', color: '#888', fontFamily: 'var(--font-mono)', fontSize: '12px' }}>
+                            [info] Initializing vscodium-rust...
+                            <br />
+                            [info] Backend connected via Tauri
+                        </div>
+                    </div>
+                )}
+                {activeTab === 'DEBUG CONSOLE' && (
+                    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '12px 16px' }}>
+                        <div style={{ color: '#666', fontSize: '12px', fontStyle: 'italic', marginBottom: '8px' }}>
+                            Debug Console is ready. No active debug session.
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', color: '#ccc', fontSize: '12px', marginTop: 'auto' }}>
+                            <i className="codicon codicon-chevron-right" style={{ fontSize: '12px', marginRight: '8px', color: '#3794ef' }}></i>
+                            <input 
+                                type="text" 
+                                placeholder="Filter or evaluate expression" 
+                                style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '12px', width: '100%', outline: 'none' }}
+                            />
+                        </div>
+                    </div>
+                )}
+                {['PROBLEMS', 'PORTS'].includes(activeTab) && (
+                    <div style={{ padding: '32px', color: '#666', fontSize: '12px', textAlign: 'center' }}>
                          {activeTab} view is currently empty.
                     </div>
                 )}
             </div>
-        </footer>
+        </div>
     );
 };
 

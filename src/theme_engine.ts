@@ -1,3 +1,4 @@
+import { loader } from '@monaco-editor/react';
 import { invoke } from './tauri_bridge';
 
 export interface VscodeTheme {
@@ -16,12 +17,12 @@ export async function applyTheme(themePath: string) {
     try {
         const themeJson = await invoke<any>('load_extension_theme', { path: themePath });
         const colors = themeJson.colors || {};
+        const tokenColors = themeJson.tokenColors || [];
         
         // Map VS Code color keys to our CSS variables
         const root = document.documentElement;
         for (const [key, value] of Object.entries(colors)) {
             if (typeof value === 'string') {
-                // Convert 'editor.background' to '--vscode-editor-background'
                 const cssVar = `--vscode-${key.replace(/\./g, '-')}`;
                 root.style.setProperty(cssVar, value);
             }
@@ -37,17 +38,53 @@ export async function applyTheme(themePath: string) {
 
         const bg = colors['editor.background'] || '#1e1e1e';
         const isDark = isColorDark(bg);
-        
         root.style.setProperty('--vscode-is-dark', isDark ? 'true' : 'false');
+
+        // Transform tokenColors to Monaco rules
+        const rules: any[] = [];
+        tokenColors.forEach((tc: any) => {
+            if (!tc.settings) return;
+            const scopes = Array.isArray(tc.scope) ? tc.scope : (tc.scope ? tc.scope.split(',') : []);
+            scopes.forEach((scope: string) => {
+                const rule: any = { token: scope.trim() };
+                if (tc.settings.foreground) rule.foreground = tc.settings.foreground.replace('#', '');
+                if (tc.settings.fontStyle) {
+                    if (tc.settings.fontStyle.includes('italic')) rule.fontStyle = 'italic';
+                    if (tc.settings.fontStyle.includes('bold')) rule.fontStyle = (rule.fontStyle || '') + ' bold';
+                }
+                rules.push(rule);
+            });
+        });
+
+        // Map standard Monaco tokens if not covered (best effort mapping)
+        const monacoThemeName = `vscode-theme-${themePath.replace(/[/\\:.]/g, '-')}`;
+        
+        loader.init().then(monaco => {
+            monaco.editor.defineTheme(monacoThemeName as any, {
+                base: isDark ? 'vs-dark' : 'vs',
+                inherit: true,
+                rules: rules,
+                colors: colors
+            });
+        });
         
         // Persist theme choice
         localStorage.setItem('active-theme-path', themePath);
+        localStorage.setItem('active-monaco-theme', monacoThemeName);
         
-        return isDark ? 'vs-dark' : 'vs';
+        return monacoThemeName;
     } catch (e) {
         console.error("Failed to apply theme:", e);
         return 'vs-dark';
     }
+}
+
+export async function initTheme() {
+    const themePath = localStorage.getItem('active-theme-path');
+    if (themePath) {
+        return await applyTheme(themePath);
+    }
+    return 'vs-dark';
 }
 
 function isColorDark(hex: string): boolean {
