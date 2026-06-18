@@ -75,7 +75,9 @@ impl KairosEngine {
         let _ = self.indexer.reindex_if_needed(&root);
 
         // 2. "Dreaming" — Proactive Diagnostics on idle
-        if root.join("Cargo.toml").exists() {
+        // DISABLED: cargo check every 60s was saturating CPU on large projects.
+        // Diagnostics are now available on-demand via dev_cargo_diagnostics tool.
+        if false && root.join("Cargo.toml").exists() {
             println!("[KAIROS] Dreaming: Running cargo diagnostics...");
             self.emit_suggestion("Indexing", "Kairos is deep-scanning project symbols in parallel...");
             

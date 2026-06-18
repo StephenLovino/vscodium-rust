@@ -303,16 +303,19 @@ pub fn run() {
                 let _ = SetProcessWorkingSetSize(handle, usize::MAX, usize::MAX);
             }
 
-            // Periodic working set trim: reclaim unused pages every 5 minutes.
+            // Periodic working set trim: reclaim unused pages every 10 minutes.
             // After heavy indexing or long agent loops, Rust may hold large amounts
-            // of paged-out heap. This forces Windows to reclaim those pages.
+            // of paged-out heap. Use moderate values to avoid page thrashing.
             #[cfg(target_os = "windows")]
             tauri::async_runtime::spawn(async {
                 loop {
-                    tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_secs(600)).await;
                     unsafe {
                         let handle = GetCurrentProcess();
-                        let _ = SetProcessWorkingSetSize(handle, usize::MAX, usize::MAX);
+                        // Use 512MB min / 1GB max instead of MAX/MAX to avoid thrashing
+                        let min_bytes = 512 * 1024 * 1024;
+                        let max_bytes = 1024 * 1024 * 1024;
+                        let _ = SetProcessWorkingSetSize(handle, min_bytes, max_bytes);
                     }
                 }
             });

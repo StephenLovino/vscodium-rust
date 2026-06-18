@@ -15,6 +15,7 @@ pub mod shell;
 pub mod terminal_tools;
 pub mod web_edit;
 pub mod web_tools;
+pub mod websearch;
 pub mod workflow_tools;
 
 pub use registry::{AiTools, ToolDefinition};

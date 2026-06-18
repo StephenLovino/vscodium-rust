@@ -74,7 +74,7 @@ impl ContextIndexer {
             if let Ok(event) = res {
                 let _ = tx.blocking_send(event);
             }
-        }, notify::Config::default());
+        }, notify::Config::default().with_poll_interval(std::time::Duration::from_secs(2)));
 
         if let Ok(mut watcher) = watcher_res {
             if let Err(e) = watcher.watch(&root, RecursiveMode::Recursive) {
@@ -85,28 +85,66 @@ impl ContextIndexer {
                     // Keep watcher alive in this thread
                     let _watcher = watcher;
                     
-                    while let Some(event) = rx.recv().await {
-                        match event.kind {
-                            EventKind::Modify(_) | EventKind::Create(_) => {
-                                // If the user edited `.cursorignore`, refresh
-                                // the cached matcher so subsequent events
-                                // honor the new rules immediately.
-                                if event.paths.iter().any(|p| p.file_name().map(|n| n == ".hadesignore" || n == ".cursorignore" || n == ".cursorindexignore" || n == ".gitignore").unwrap_or(false)) {
-                                    let fresh = IgnoreSet::load(&root);
-                                    if let Ok(mut w) = ignore_set.write() {
-                                        *w = fresh;
-                                    }
-                                }
-                                let snapshot = ignore_set.read().ok().map(|g| g.clone());
-                                for path in event.paths {
-                                    if Self::is_indexable_with(&path, snapshot.as_ref()) {
-                                        if let Err(e) = Self::index_single_file(&ms, &root, &path).await {
-                                            eprintln!("[CONTEXT] Error indexing file {:?}: {:?}", path, e);
+                    // Debounce: batch rapid-fire events (e.g. during builds)
+                    let mut pending_paths: Vec<std::path::PathBuf> = Vec::new();
+                    let mut debounce_deadline = None;
+                    
+                    loop {
+                        // If we have pending events and the debounce window expired, process them
+                        if !pending_paths.is_empty() {
+                            if let Some(deadline) = debounce_deadline {
+                                if tokio::time::Instant::now() >= deadline {
+                                    let paths: Vec<_> = pending_paths.drain(..).collect();
+                                    debounce_deadline = None;
+                                    let snapshot = ignore_set.read().ok().map(|g| g.clone());
+                                    for path in paths {
+                                        if Self::is_indexable_with(&path, snapshot.as_ref()) {
+                                            if let Err(e) = Self::index_single_file(&ms, &root, &path).await {
+                                                eprintln!("[CONTEXT] Error indexing file {:?}: {:?}", path, e);
+                                            }
                                         }
                                     }
+                                    continue;
                                 }
                             }
-                            _ => {}
+                        }
+                        
+                        // Wait for next event or timeout
+                        let timeout = debounce_deadline.map(|d| {
+                            let remaining = d.saturating_duration_since(tokio::time::Instant::now());
+                            remaining.min(std::time::Duration::from_millis(500))
+                        }).unwrap_or(std::time::Duration::from_millis(500));
+                        
+                        match tokio::time::timeout(timeout, rx.recv()).await {
+                            Ok(Some(event)) => {
+                                match event.kind {
+                                    EventKind::Modify(_) | EventKind::Create(_) => {
+                                        // Refresh ignore files
+                                        if event.paths.iter().any(|p| p.file_name().map(|n| n == ".hadesignore" || n == ".cursorignore" || n == ".cursorindexignore" || n == ".gitignore").unwrap_or(false)) {
+                                            let fresh = IgnoreSet::load(&root);
+                                            if let Ok(mut w) = ignore_set.write() {
+                                                *w = fresh;
+                                            }
+                                        }
+                                        // Collect paths for debounced processing
+                                        for path in event.paths {
+                                            if path.is_file() {
+                                                pending_paths.push(path);
+                                            }
+                                        }
+                                        // Set/reset debounce deadline (300ms window)
+                                        debounce_deadline = Some(tokio::time::Instant::now() + std::time::Duration::from_millis(300));
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            Ok(None) => break, // Channel closed
+                            Err(_) => {
+                                // Timeout — process any pending events
+                                if !pending_paths.is_empty() {
+                                    debounce_deadline = Some(tokio::time::Instant::now());
+                                }
+                            }
                         }
                     }
                 });
@@ -422,42 +460,51 @@ impl ContextIndexer {
 
     fn extract_symbols_detailed(content: &str, ext: &str, path: &str) -> Vec<crate::memory_store::SymbolDefinition> {
         let mut symbols = Vec::new();
-        let mut parser = Parser::new();
 
-        let language = match ext {
-            "rs" => tree_sitter_rust::LANGUAGE,
-            "ts" | "tsx" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT,
-            "js" | "jsx" => tree_sitter_typescript::LANGUAGE_TSX,
-            "py" => tree_sitter_python::LANGUAGE,
+        let (language, query_str) = match ext {
+            "rs" => (tree_sitter_rust::LANGUAGE.into(),
+                "(function_item name: (identifier) @name) @kind_func
+                 (struct_item name: (type_identifier) @name) @kind_struct
+                 (enum_item name: (type_identifier) @name) @kind_enum
+                 (trait_item name: (type_identifier) @name) @kind_trait
+                 (impl_item type: (type_identifier) @name) @kind_impl"),
+            "ts" | "tsx" | "js" | "jsx" => (tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+                "(function_declaration name: (identifier) @name) @kind_func
+                 (variable_declarator name: (identifier) @name value: (arrow_function)) @kind_func
+                 (method_definition name: (property_identifier) @name) @kind_func
+                 (class_declaration name: (type_identifier) @name) @kind_class
+                 (interface_declaration name: (type_identifier) @name) @kind_interface
+                 (type_alias_declaration name: (type_identifier) @name) @kind_type"),
+            "py" => (tree_sitter_python::LANGUAGE.into(),
+                "(function_definition name: (identifier) @name) @kind_func
+                 (class_definition name: (identifier) @name) @kind_class"),
             _ => return Vec::new(),
         };
 
-        parser.set_language(&language.into()).expect("Error loading language");
-        let tree = parser.parse(content, None).expect("Error parsing code");
-
-        let query_str = match ext {
-            "rs" => "(function_item name: (identifier) @name) @kind_func
-                     (struct_item name: (type_identifier) @name) @kind_struct
-                     (enum_item name: (type_identifier) @name) @kind_enum
-                     (trait_item name: (type_identifier) @name) @kind_trait
-                     (impl_item type: (type_identifier) @name) @kind_impl",
-            "ts" | "tsx" | "js" | "jsx" => "(function_declaration name: (identifier) @name) @kind_func
-                                             (variable_declarator name: (identifier) @name value: (arrow_function)) @kind_func
-                                             (method_definition name: (property_identifier) @name) @kind_func
-                                             (class_declaration name: (type_identifier) @name) @kind_class
-                                             (interface_declaration name: (type_identifier) @name) @kind_interface
-                                             (type_alias_declaration name: (type_identifier) @name) @kind_type",
-            "py" => "(function_definition name: (identifier) @name) @kind_func
-                     (class_definition name: (identifier) @name) @kind_class",
-            _ => "",
-        };
-
-        if query_str.is_empty() {
-            return Vec::new();
+        // Cache parser per language using thread_local to avoid re-creating 2000x per cycle
+        use std::cell::RefCell;
+        thread_local! {
+            static PARSER_CACHE: RefCell<HashMap<String, Parser>> = RefCell::new(HashMap::new());
         }
+        
+        PARSER_CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            let parser = cache.entry(ext.to_string()).or_insert_with(|| {
+                let mut p = Parser::new();
+                p.set_language(&language).expect("Error loading language");
+                p
+            });
+            
+            let tree = match parser.parse(content, None) {
+                Some(t) => t,
+                None => return Vec::new(),
+            };
 
-        let query = Query::new(&language.into(), query_str).expect("Error creating query");
-        let mut cursor = QueryCursor::new();
+            let query = match Query::new(&language, query_str) {
+                Ok(q) => q,
+                Err(_) => return Vec::new(),
+            };
+            let mut cursor = QueryCursor::new();
         let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
         while let Some(m) = StreamingIterator::next(&mut matches) {
             let mut name = String::new();
@@ -487,6 +534,7 @@ impl ContextIndexer {
             }
         }
         symbols
+        })
     }
 
     /// Returns just the symbol names for a file — useful for quick context summaries.

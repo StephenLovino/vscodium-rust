@@ -157,8 +157,8 @@ impl MemoryStore {
         if !FLUSHER_ACTIVE.swap(true, Ordering::SeqCst) {
             tauri::async_runtime::spawn(async move {
                 loop {
-                    // Optimized Flush Interval: 10 seconds for performance balance
-                    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+                    // Flush every 30s (was 10s) to reduce CPU/RAM churn from deep-cloning
+                    tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
                     
                     if dirty.load(Ordering::SeqCst) {
                         // Silent persistence to protect logs; only error if I/O fails

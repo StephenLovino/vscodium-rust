@@ -434,9 +434,9 @@ impl EditorState {
             let k_clone = kairos.clone();
             tauri::async_runtime::spawn(async move {
                 loop {
-                    // 60s: was 10s, which spawned `cargo` every 10s and held
+                    // 300s: was 60s, which spawned `cargo` every minute and held
                     // the process at "High" GPU/CPU power even when idle.
-                    tokio::time::sleep(tokio::time::Duration::from_secs(60)).await;
+                    tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
                     k_clone.tick().await;
                 }
             });
