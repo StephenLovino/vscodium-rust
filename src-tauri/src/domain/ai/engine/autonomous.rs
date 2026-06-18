@@ -2144,7 +2144,15 @@ impl Sentient {
                             tokens_count += content.chars().count() / 4; // Approximate token count
 
                             // Mirror into the pollable buffer (event stream is dead).
-                            if let Ok(mut b) = self.chat_stream_buf.lock() { b.push_str(content); }
+                            if let Ok(mut b) = self.chat_stream_buf.lock() {
+                                const MAX_BUF: usize = 512_000;
+                                let new_len = b.len() + content.len();
+                                if new_len > MAX_BUF {
+                                    let excess = new_len - MAX_BUF;
+                                    b.drain(0..excess);
+                                }
+                                b.push_str(content);
+                            }
                             if let Some(ref cb) = on_chunk {
                                 cb(content);
                             }
@@ -2201,7 +2209,15 @@ impl Sentient {
                             delta_to_emit = Some(content.to_string());
                             tokens_count += content.chars().count() / 4;
 
-                            if let Ok(mut b) = self.chat_stream_buf.lock() { b.push_str(content); }
+                            if let Ok(mut b) = self.chat_stream_buf.lock() {
+                                const MAX_BUF: usize = 512_000;
+                                let new_len = b.len() + content.len();
+                                if new_len > MAX_BUF {
+                                    let excess = new_len - MAX_BUF;
+                                    b.drain(0..excess);
+                                }
+                                b.push_str(content);
+                            }
                             if let Some(ref cb) = on_chunk {
                                 cb(content);
                             }

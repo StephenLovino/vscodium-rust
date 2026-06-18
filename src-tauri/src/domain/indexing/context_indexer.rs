@@ -201,6 +201,11 @@ impl ContextIndexer {
 
         println!("[CONTEXT] Starting parallel index cycle for: {:?}", root);
 
+        // Clear hashes at start of each cycle to prevent unbounded growth
+        if let Ok(mut h) = hashes.write() {
+            h.clear();
+        }
+
         // 1. Collect all indexable paths first
         let ig_ref = ignore_set.as_ref();
         let paths: Vec<PathBuf> = WalkDir::new(root)
@@ -481,30 +486,29 @@ impl ContextIndexer {
             _ => return Vec::new(),
         };
 
-        // Cache parser per language using thread_local to avoid re-creating 2000x per cycle
-        use std::cell::RefCell;
-        thread_local! {
-            static PARSER_CACHE: RefCell<HashMap<String, Parser>> = RefCell::new(HashMap::new());
-        }
+        // SHARED parser cache (single instance, not per-thread) to avoid 100MB+ memory
+        // from thread_local caches across Rayon worker threads.
+        static PARSER_CACHE: std::sync::OnceLock<std::sync::Mutex<HashMap<String, tree_sitter::Parser>>> = std::sync::OnceLock::new();
+        let cache = PARSER_CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()));
         
-        PARSER_CACHE.with(|cache| {
-            let mut cache = cache.borrow_mut();
-            let parser = cache.entry(ext.to_string()).or_insert_with(|| {
-                let mut p = Parser::new();
+        let tree = {
+            let mut guard = cache.lock().unwrap();
+            let parser = guard.entry(ext.to_string()).or_insert_with(|| {
+                let mut p = tree_sitter::Parser::new();
                 p.set_language(&language).expect("Error loading language");
                 p
             });
-            
-            let tree = match parser.parse(content, None) {
+            match parser.parse(content, None) {
                 Some(t) => t,
                 None => return Vec::new(),
-            };
+            }
+        };
 
-            let query = match Query::new(&language, query_str) {
-                Ok(q) => q,
-                Err(_) => return Vec::new(),
-            };
-            let mut cursor = QueryCursor::new();
+        let query = match Query::new(&language, query_str) {
+            Ok(q) => q,
+            Err(_) => return Vec::new(),
+        };
+        let mut cursor = QueryCursor::new();
         let mut matches = cursor.matches(&query, tree.root_node(), content.as_bytes());
         while let Some(m) = StreamingIterator::next(&mut matches) {
             let mut name = String::new();
@@ -534,7 +538,6 @@ impl ContextIndexer {
             }
         }
         symbols
-        })
     }
 
     /// Returns just the symbol names for a file — useful for quick context summaries.

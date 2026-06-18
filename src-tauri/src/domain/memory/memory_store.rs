@@ -470,27 +470,46 @@ impl MemoryStore {
     }
 
     pub async fn add_relationship(&self, tag: &str, id: &str) {
+        const MAX_ENTITIES: usize = 2000;
         let mut lock = self.entities.write().await;
         lock.entry(tag.to_string())
             .or_default()
             .push(id.to_string());
+        // Evict oldest entries if over cap
+        if lock.len() > MAX_ENTITIES {
+            let keys_to_remove: Vec<_> = lock.keys().take(lock.len() - MAX_ENTITIES).cloned().collect();
+            for key in keys_to_remove {
+                lock.remove(&key);
+            }
+        }
         drop(lock);
         self.is_dirty.store(true, Ordering::SeqCst);
     }
 
     pub async fn store_symbol(&self, symbol: SymbolDefinition) {
+        const MAX_SYMBOLS: usize = 5000;
         let mut lock = self.symbol_graph.write().await;
         lock.definitions.retain(|d| !(d.name == symbol.name && d.path == symbol.path));
         lock.definitions.push(symbol);
+        // Evict oldest if over cap
+        if lock.definitions.len() > MAX_SYMBOLS {
+            let excess = lock.definitions.len() - MAX_SYMBOLS;
+            lock.definitions.drain(0..excess);
+        }
         drop(lock);
         self.is_dirty.store(true, Ordering::SeqCst);
     }
 
     /// Synchronous version for high-performance bulk operations (e.g. indexing)
     pub fn store_symbol_sync(&self, symbol: SymbolDefinition) {
+        const MAX_SYMBOLS: usize = 5000;
         if let Ok(mut lock) = self.symbol_graph.try_write() {
             lock.definitions.retain(|d| !(d.name == symbol.name && d.path == symbol.path));
             lock.definitions.push(symbol);
+            if lock.definitions.len() > MAX_SYMBOLS {
+                let excess = lock.definitions.len() - MAX_SYMBOLS;
+                lock.definitions.drain(0..excess);
+            }
             self.is_dirty.store(true, Ordering::SeqCst);
         }
     }

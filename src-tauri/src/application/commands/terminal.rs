@@ -390,7 +390,14 @@ pub async fn spawn_terminal(
                     // never drop bytes. The legacy `terminal-data` event is kept
                     // as a best-effort secondary for any external listeners.
                     if let Ok(mut pend) = state.terminal.pending.lock() {
-                        pend.entry(term_id.clone()).or_default().push_str(&data);
+                        let buf = pend.entry(term_id.clone()).or_default();
+                        // Cap at 1MB per terminal to prevent unbounded growth
+                        const MAX_PENDING: usize = 1_024_000;
+                        if buf.len() + data.len() > MAX_PENDING {
+                            let excess = buf.len() + data.len() - MAX_PENDING;
+                            buf.drain(..excess);
+                        }
+                        buf.push_str(&data);
                     }
                     let _ = app_handle.emit(
                         "terminal-data",
