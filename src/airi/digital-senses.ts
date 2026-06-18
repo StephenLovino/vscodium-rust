@@ -59,10 +59,10 @@ export class AIRIDigitalSenses {
    * Start continuous sensory perception
    */
   start(): void {
-    // Perceive everything every 5 seconds
+    // Perceive everything every 15 seconds
     this.senseInterval = setInterval(() => {
       this.perceiveAll();
-    }, 5000);
+    }, 15000);
 
   }
 

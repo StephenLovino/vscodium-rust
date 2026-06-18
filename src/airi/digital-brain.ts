@@ -62,10 +62,10 @@ export class AIRIDigitalBrain {
     airiSelfHealing;
     airiSafetyProtocol;
 
-    // Start perception loop (every 2 seconds)
+    // Start perception loop (every 10 seconds)
     this.perceptionInterval = setInterval(() => {
       this.perceptionLoop();
-    }, 2000);
+    }, 10000);
 
     // Start autonomous action loop (every 30 seconds)
     this.actionInterval = setInterval(() => {

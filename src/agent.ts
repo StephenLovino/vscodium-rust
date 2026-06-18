@@ -4136,7 +4136,7 @@ setInterval(async () => {
         }
     } catch { /* backend not ready yet */ }
     finally { __vscrProposalBusy = false; }
-}, 700);
+}, 3000);
 
 // Open a file in a tab when the AI requests it
 listen('editor_open_file', async (event: { payload: { path: string } }) => {

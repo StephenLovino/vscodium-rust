@@ -65,10 +65,10 @@ export class AIRICybersecurityEngine {
      * Start network monitoring loop
      */
     private startNetworkMonitoring(): void {
-        // Check for port scans every 10 seconds
+        // Check for port scans every 30 seconds
         setInterval(() => {
             this.detectPortScans();
-        }, 10000);
+        }, 30000);
 
         // Monitor clipboard for phishing links (if user enables)
         // TODO: Implement clipboard monitoring with permission
